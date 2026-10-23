@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "paths": {
+      "@genoffice/electron-utils": ["../../packages/electron-utils/src/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "electron.vite.config.ts", "vite.renderer.config.ts"]
+}
