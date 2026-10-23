@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { epubPathOf, epubResourceUrl } from '../src/shared/ipc'
 import {
   FONT_STEPS,
+  prefsMessage,
   loadPrefs,
   loadProgress,
   nextFontSize,
@@ -74,5 +75,15 @@ describe('chapter urls', () => {
       fragment: 'sec2',
     })
     expect(splitFragment('OEBPS/ch2.xhtml')).toEqual({ href: 'OEBPS/ch2.xhtml', fragment: '' })
+  })
+})
+
+describe('chapter prefs message', () => {
+  it('carries the current font size and theme for a loaded chapter', () => {
+    expect(prefsMessage({ fontSize: 135, theme: 'sepia' })).toEqual({
+      type: 'epub-apply',
+      fontSize: 135,
+      theme: 'sepia',
+    })
   })
 })

@@ -4,6 +4,7 @@ import {
   loadPrefs,
   loadProgress,
   nextFontSize,
+  prefsMessage,
   savePrefs,
   saveProgress,
   splitFragment,
@@ -160,11 +161,19 @@ export default function App() {
   const applyToFrame = useCallback(() => {
     const frame = frameRef.current?.contentWindow
     if (!frame) return
-    frame.postMessage({ type: 'epub-apply', fontSize: prefs.fontSize, theme: prefs.theme }, '*')
+    frame.postMessage(prefsMessage(prefs), '*')
     if (pendingRatio.current !== null) {
       frame.postMessage({ type: 'epub-scroll', ratio: pendingRatio.current }, '*')
       pendingRatio.current = null
     }
+  }, [prefs])
+
+  // 字号/主题要立刻作用在已加载的章节上：onLoad 只覆盖章节切换那一次，
+  // 少了这一步，点 A+/A- 只会改状态，正文要等翻页才变。
+  useEffect(() => {
+    const frame = frameRef.current?.contentWindow
+    if (!frame) return
+    frame.postMessage(prefsMessage(prefs), '*')
   }, [prefs])
 
   useEffect(() => {

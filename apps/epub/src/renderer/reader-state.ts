@@ -87,3 +87,18 @@ export function splitFragment(href: string): { href: string; fragment: string } 
   if (hash === -1) return { href, fragment: '' }
   return { href: href.slice(0, hash), fragment: href.slice(hash + 1) }
 }
+
+/** Message the reader posts into a chapter to (re)apply the reading prefs. */
+export interface ApplyPrefsMessage {
+  type: 'epub-apply'
+  fontSize: number
+  theme: ReaderTheme
+}
+
+/**
+ * 参数：prefs（当前字号与主题）
+ * 核心流程：把阅读设置转成章节文档能识别的消息，加载时与改动时共用同一份载荷
+ */
+export function prefsMessage(prefs: ReaderPrefs): ApplyPrefsMessage {
+  return { type: 'epub-apply', fontSize: prefs.fontSize, theme: prefs.theme }
+}
