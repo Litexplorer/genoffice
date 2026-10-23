@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { BrowserWindow, WebContentsView, app, ipcMain, protocol } from 'electron'
+import type { CustomScheme } from 'electron'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import {
   installRendererProtocol,
@@ -79,14 +80,14 @@ function openResult(bookId: string, path: string, book: EpubBook): EpubOpenResul
   }
 }
 
-/** Must run before app ready, and only once per process. */
-export function registerEpubSchemes(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: EPUB_SCHEME,
-      privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
-    },
-  ])
+/**
+ * Spread into the host's single registerSchemesAsPrivileged call: Electron
+ * replaces the whole list on a second call, which would drop the renderer
+ * scheme's secure flag and break crypto in every module renderer.
+ */
+export const EPUB_SCHEME_PRIVILEGE: CustomScheme = {
+  scheme: EPUB_SCHEME,
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
 }
 
 function serveBookResource(request: Request): Response | Promise<Response> {
@@ -181,8 +182,7 @@ export function createEpubView(openPath?: string | null): WebContentsView {
 
 /** Standalone window mode: `npm run dev -w @genoffice/epub`, an .epub path may be passed via argv. */
 export function startEpubStandalone(): void {
-  registerEpubSchemes()
-  registerRendererScheme()
+  registerRendererScheme([EPUB_SCHEME_PRIVILEGE])
   configureEpubRuntime({
     preloadPath: join(__dirname, '../preload/index.js'),
     rendererUrl: process.env.ELECTRON_RENDERER_URL,

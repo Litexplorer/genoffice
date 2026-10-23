@@ -279,7 +279,7 @@ import {
   configureEpubRuntime,
   createEpubView,
   epubFileRenamed,
-  registerEpubSchemes,
+  EPUB_SCHEME_PRIVILEGE,
 } from '../../../epub/src/main/epub-main'
 import type {
   AccountLoginEvent,
@@ -569,8 +569,7 @@ configureEpubRuntime({
   rendererUrl: process.env.EPUB_RENDERER_URL,
 })
 // privileged-scheme registration is only legal before app ready
-registerPrivilegedSchemes()
-registerEpubSchemes()
+registerPrivilegedSchemes([EPUB_SCHEME_PRIVILEGE])
 
 // ---- UI language ----
 // Persisted in userData/app-settings.json so the editor modules can read the

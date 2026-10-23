@@ -1,14 +1,23 @@
-import { DOCX_MEDIA_SCHEME_PRIVILEGE, RENDERER_SCHEME_PRIVILEGE } from '@genoffice/electron-utils'
+import {
+  DOCX_MEDIA_SCHEME_PRIVILEGE,
+  RENDERER_SCHEME_PRIVILEGE,
+  registerPrivilegedSchemesOnce,
+} from '@genoffice/electron-utils'
+import type { CustomScheme } from 'electron'
 import { protocol } from 'electron'
 import { ASSET_SCHEME, PREVIEW_SCHEME, buildPreviewDocument } from './preview-document'
 
 export { assetBaseHref, previewUrlFor } from './preview-document'
 
-/** Must run before app ready, and only once per process, so the renderer scheme
- * rides along. Both html schemes are secure: a secure preview document loading
- * stylesheets and scripts from a non-secure scheme would be blocked as mixed content. */
-export function registerPrivilegedSchemes(): void {
-  protocol.registerSchemesAsPrivileged([
+/**
+ * 参数：extraSchemes（宿主自己的协议，和这一批一起注册）
+ * 核心流程：Must run before app ready, and only once per process, so the renderer
+ * scheme rides along. Both html schemes are secure: a secure preview document
+ * loading stylesheets and scripts from a non-secure scheme would be blocked as
+ * mixed content.
+ */
+export function registerPrivilegedSchemes(extraSchemes: CustomScheme[] = []): void {
+  registerPrivilegedSchemesOnce([
     RENDERER_SCHEME_PRIVILEGE,
     DOCX_MEDIA_SCHEME_PRIVILEGE,
     {
@@ -25,6 +34,7 @@ export function registerPrivilegedSchemes(): void {
         stream: true,
       },
     },
+    ...extraSchemes,
   ])
 }
 
