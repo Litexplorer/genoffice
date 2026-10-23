@@ -24,6 +24,7 @@ const FAMILY_BY_KIND: Record<Exclude<TabKind, 'home' | 'help'>, EditorFamily> = 
   slides: 'pptx',
   markdown: 'md',
   html: 'html',
+  epub: 'html',
   pdf: 'pdf',
 }
 

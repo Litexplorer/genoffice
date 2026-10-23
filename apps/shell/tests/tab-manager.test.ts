@@ -156,6 +156,7 @@ vi.mock('../../markdown/src/main/markdown-main', () => ({
   requestMarkdownClose: (...args: unknown[]) => requestMarkdownClose(...(args as [])),
 }))
 
+const createEpubView = vi.fn(() => makeFakeView())
 const createHtmlView = vi.fn(() => makeFakeView())
 const createHtmlPresentView = vi.fn(() => makeFakeView())
 const htmlIsDirty = vi.fn(() => false)
@@ -166,6 +167,13 @@ vi.mock('../../html/src/main/html-main', () => ({
   createHtmlPresentView: (...args: unknown[]) => createHtmlPresentView(...(args as [])),
   htmlIsDirty: (...args: unknown[]) => htmlIsDirty(...(args as [])),
   requestHtmlClose: (...args: unknown[]) => requestHtmlClose(...(args as [])),
+}))
+
+vi.mock('../../epub/src/main/epub-main', () => ({
+  createEpubView: (...args: unknown[]) => createEpubView(...(args as [])),
+  configureEpubRuntime: () => {},
+  registerEpubSchemes: () => {},
+  epubFileRenamed: () => {},
 }))
 
 import { TabManager } from '../src/main/tab-manager'
@@ -770,6 +778,15 @@ describe('file path bookkeeping', () => {
       open: () => {
         manager.openHtmlTab('/tmp/one.html')
         return lastCreatedView(createHtmlView)
+      },
+    },
+    {
+      kind: 'epub',
+      file: '/tmp/one.epub',
+      renamed: '/tmp/two.epub',
+      open: () => {
+        manager.openEpubTab('/tmp/one.epub')
+        return lastCreatedView(createEpubView)
       },
     },
   ]

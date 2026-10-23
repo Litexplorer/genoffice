@@ -275,6 +275,12 @@ import {
   setHtmlPresentHooks,
   setHtmlProvisionalTitleHook,
 } from '../../../html/src/main/html-main'
+import {
+  configureEpubRuntime,
+  createEpubView,
+  epubFileRenamed,
+  registerEpubSchemes,
+} from '../../../epub/src/main/epub-main'
 import type {
   AccountLoginEvent,
   AutoSaveDefault,
@@ -315,6 +321,7 @@ import {
 import { isMoveSource, isUserVisibleFile, type FileTargetSources } from './file-targets'
 import {
   DOCX_RE,
+  EPUB_RE,
   HTML_RE,
   PDF_RE,
   PPTX_RE,
@@ -510,6 +517,9 @@ const MARKDOWN_OUT = app.isPackaged
 const HTML_OUT = app.isPackaged
   ? join(process.resourcesPath, 'modules', 'html')
   : join(APPS_ROOT, 'html', 'out')
+const EPUB_OUT = app.isPackaged
+  ? join(process.resourcesPath, 'modules', 'epub')
+  : join(APPS_ROOT, 'epub', 'out')
 const SIDECAR_BIN = app.isPackaged
   ? join(process.resourcesPath, 'native', SIDECAR_EXE)
   : join(APPS_ROOT, 'sheets', 'native', 'xlsx-engine', 'target', 'release', SIDECAR_EXE)
@@ -554,8 +564,13 @@ configureHtmlRuntime({
   rendererFile: join(HTML_OUT, 'renderer', 'index.html'),
   openGeneratedPath: (path) => openGeneratedDocument(path),
 })
+configureEpubRuntime({
+  preloadPath: join(EPUB_OUT, 'preload', 'index.js'),
+  rendererUrl: process.env.EPUB_RENDERER_URL,
+})
 // privileged-scheme registration is only legal before app ready
 registerPrivilegedSchemes()
+registerEpubSchemes()
 
 // ---- UI language ----
 // Persisted in userData/app-settings.json so the editor modules can read the
@@ -3662,6 +3677,7 @@ function afterFileMoved(oldPath: string, newPath: string): void {
     else if (t.kind === 'sheets') sheetsFileRenamed(t.webContents, oldPath, newPath)
     else if (t.kind === 'markdown') markdownFileRenamed(t.webContents, oldPath, newPath)
     else if (t.kind === 'html') htmlFileRenamed(t.webContents, oldPath, newPath)
+    else if (t.kind === 'epub') epubFileRenamed(t.webContents, oldPath, newPath)
     else if (t.kind === 'pdf') pdfFileRenamed(t.webContents, oldPath, newPath)
   }
 }
@@ -3826,6 +3842,9 @@ function applyMenuFor(kind: TabKind): void {
       break
     case 'html':
       buildHtmlMenu()
+      break
+    case 'epub':
+      buildEpubMenu()
       break
     default:
       buildHomeMenu()
@@ -4228,6 +4247,7 @@ const OPEN_DIALOG_EXTENSIONS = [
   'json',
   'html',
   'htm',
+  'epub',
 ]
 
 function notifyUnsupportedFile(filePath: string): void {
@@ -4348,6 +4368,13 @@ function routeDocumentPath(filePath: string): boolean {
     const existing = tabManager.findHtmlTabByPath(filePath)
     if (existing) tabManager.activateTab(existing)
     else tabManager.openHtmlTab(filePath)
+    return true
+  }
+  if (EPUB_RE.test(filePath)) {
+    recordRecentFile(filePath)
+    const existing = tabManager.findEpubTabByPath(filePath)
+    if (existing) tabManager.activateTab(existing)
+    else tabManager.openEpubTab(filePath)
     return true
   }
   notifyUnsupportedFile(filePath)
@@ -5514,6 +5541,7 @@ const TAB_MENU_ICON: Record<TabKind, keyof MenuIconSet> = {
   pdf: 'pdf',
   markdown: 'md',
   html: 'html',
+  epub: 'html',
   help: 'home',
 }
 
@@ -5956,6 +5984,56 @@ function buildPdfMenu(): void {
             const tab = activePdfTarget()
             if (tab) sendPdfPrintRequest(tab.webContents)
           },
+        },
+        { type: 'separator' },
+        {
+          label: tm('menuClose'),
+          accelerator: 'CmdOrCtrl+W',
+          click: () => closeFocusedEditor(),
+        },
+        { type: 'separator' },
+        settingsMenuItem(labels),
+      ],
+    },
+    editMenuTemplate(process.platform, appMenuLabels(currentLang())),
+    windowMenuTemplate(process.platform, appMenuLabels(currentLang())),
+    {
+      role: 'help',
+      label: tm('menuHelp'),
+      submenu: [
+        { label: tm('thirdPartyNotices'), click: () => void openThirdPartyNotices() },
+        { type: 'separator' },
+        checkUpdatesMenuItem(appMenuLabels(currentLang())),
+        aboutMenuItem(appMenuLabels(currentLang())),
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+// ---- epub menu (read-only reader: no save, export or print entries) ----
+
+function buildEpubMenu(): void {
+  const labels = appMenuLabels(currentLang())
+  const appMenu = appMenuTemplate(process.platform, labels, {
+    appLabel: app.name,
+    extra: [settingsMenuItem(labels)],
+  })
+  const template: MenuItemConstructorOptions[] = [
+    ...(appMenu ? [appMenu] : []),
+    {
+      label: tm('menuFile'),
+      submenu: [
+        {
+          label: tm('menuOpen'),
+          accelerator: 'CmdOrCtrl+O',
+          click: () => void openFileViaDialog(),
+        },
+        { type: 'separator' },
+        {
+          label: tm('backToHome'),
+          accelerator: 'Shift+CmdOrCtrl+H',
+          click: () => tabManager?.openHomeTab(),
         },
         { type: 'separator' },
         {
@@ -6889,6 +6967,7 @@ app.whenReady().then(async () => {
     pdf: join(PDF_OUT, 'renderer'),
     markdown: join(MARKDOWN_OUT, 'renderer'),
     html: join(HTML_OUT, 'renderer'),
+    epub: join(EPUB_OUT, 'renderer'),
     // the manual shares the shell's own renderer bundle (help mode)
     help: join(__dirname, '../renderer'),
   })

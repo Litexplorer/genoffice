@@ -8,10 +8,11 @@ const XLSX_RE = /\.(xlsx|xlsm|xls|csv|tsv|ods|ots)$/i
 const PPTX_RE = /\.(pptx|odp|otp)$/i
 const PDF_RE = /\.pdf$/i
 const HTML_RE = /\.html?$/i
+const EPUB_RE = /\.epub$/i
 
 const TEXT_RE = /\.(md|markdown|txt|json)$/i
 
-export { DOCX_RE, XLSX_RE, PPTX_RE, PDF_RE, HTML_RE, TEXT_RE }
+export { DOCX_RE, XLSX_RE, PPTX_RE, PDF_RE, HTML_RE, EPUB_RE, TEXT_RE }
 
 export function appForPath(path: string): DocumentTabKind | undefined {
   if (DOCX_RE.test(path)) return 'docs'
@@ -20,6 +21,7 @@ export function appForPath(path: string): DocumentTabKind | undefined {
   if (PDF_RE.test(path)) return 'pdf'
   if (TEXT_RE.test(path)) return 'markdown'
   if (HTML_RE.test(path)) return 'html'
+  if (EPUB_RE.test(path)) return 'epub'
   return undefined
 }
 

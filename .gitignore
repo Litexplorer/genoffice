@@ -41,3 +41,6 @@ __pycache__/
 # One-off verification tests kept while chasing a fix; promote to a real test
 # file (or delete) instead of committing them under this name.
 _scratch-*
+
+# 本地 epub 测试书（受版权保护，不进仓库；测试用 EPUB_FIXTURE 指定路径）
+*.epub

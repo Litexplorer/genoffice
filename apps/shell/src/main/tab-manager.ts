@@ -24,6 +24,7 @@ import {
   htmlIsDirty,
   requestHtmlClose,
 } from '../../../html/src/main/html-main'
+import { createEpubView } from '../../../epub/src/main/epub-main'
 import {
   createPdfView,
   clearPdfDirty,
@@ -487,6 +488,24 @@ export class TabManager {
       kind: 'html',
       view,
       title: openPath ? basename(openPath) : this.untitled('html', 'AI HTML'),
+      filePath: openPath,
+    })
+    this.activateTab(id)
+    return id
+  }
+
+  openEpubTab(openPath?: string): string {
+    const view = createEpubView(openPath)
+    const id = `t${this.nextId++}`
+    this.shellWindow.contentView.addChildView(view)
+    view.setVisible(false)
+    this.trackHtmlFullScreen(view)
+    this.tabs.push({
+      id,
+      lastActiveAt: Date.now(),
+      kind: 'epub',
+      view,
+      title: openPath ? basename(openPath) : 'EPUB',
       filePath: openPath,
     })
     this.activateTab(id)
@@ -1005,6 +1024,10 @@ export class TabManager {
     return this.findTabOfKindByPath('html', path)
   }
 
+  findEpubTabByPath(path?: string): string | undefined {
+    return this.findTabOfKindByPath('epub', path)
+  }
+
   /** the active tab's html view, if the active tab is html (html menu target) */
   activeHtmlTab(): { id: string; webContents: WebContents; filePath?: string } | undefined {
     const tab = this.tabs.find((t) => t.id === this.activeId)
@@ -1049,6 +1072,8 @@ function createViewFor(kind: TabKind, filePath: string | undefined): WebContents
       return createMarkdownView(filePath)
     case 'html':
       return createHtmlView(filePath)
+    case 'epub':
+      return createEpubView(filePath)
     default:
       return null
   }

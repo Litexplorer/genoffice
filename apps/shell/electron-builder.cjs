@@ -225,6 +225,7 @@ function assertModuleTreesPresent() {
     '../pdf/out',
     '../markdown/out',
     '../html/out',
+    '../epub/out',
     '../../packages/cli/dist/genoffice.cjs',
     '../../packages/cli/dist/node_modules/jsdom',
   ]) {
@@ -464,6 +465,14 @@ const FILE_ASSOCIATIONS = [
     icon: 'html',
     mimeType: 'text/html',
   },
+  {
+    ext: 'epub',
+    name: 'EPUB Book',
+    description: 'EPUB Book',
+    role: 'Viewer',
+    icon: 'html',
+    mimeType: 'application/epub+zip',
+  },
 ]
 
 const config = {
@@ -509,6 +518,10 @@ const config = {
     {
       from: '../html/out',
       to: 'modules/html',
+    },
+    {
+      from: '../epub/out',
+      to: 'modules/epub',
     },
     // PDF text editing engines: the bundled main resolves these under
     // Resources/wasm when node_modules is absent (apps/pdf/src/main/wasm-path.ts)

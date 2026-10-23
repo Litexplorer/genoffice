@@ -147,6 +147,7 @@ const KIND_ICON: Record<TabSummary['kind'], ReactElement> = {
   pdf: <PdfIcon />,
   markdown: <MarkdownIcon />,
   html: <HtmlIcon />,
+  epub: <HtmlIcon />,
   help: <HelpIcon />,
 }
 
