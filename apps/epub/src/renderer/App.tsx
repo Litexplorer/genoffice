@@ -137,12 +137,17 @@ export default function App() {
     [],
   )
 
-  const goChapter = useCallback((target: number, nextFragment = '') => {
+  /**
+   * `startRatio` > 0 opens the chapter already scrolled in, so paging backwards
+   * lands on the previous chapter's last lines instead of its first line.
+   */
+  const goChapter = useCallback((target: number, nextFragment = '', startRatio = 0) => {
     const current = bookRef.current
     if (!current || target < 0 || target >= current.chapters.length) return
+    pendingRatio.current = startRatio > 0 ? startRatio : null
     setFragment(nextFragment)
     setIndex(target)
-    saveProgress(localStorage, current.path, { chapter: target, ratio: 0 })
+    saveProgress(localStorage, current.path, { chapter: target, ratio: startRatio })
   }, [])
 
   const src = useMemo(() => {
@@ -185,11 +190,11 @@ export default function App() {
         if (now - lastEdgeAt.current < 900) return
         lastEdgeAt.current = now
         if (data.edge === 'end') goChapter(indexRef.current + 1)
-        else if (data.edge === 'start') goChapter(indexRef.current - 1)
+        else if (data.edge === 'start') goChapter(indexRef.current - 1, '', 1)
         return
       }
       if (data.type === 'epub-key') {
-        if (data.key === 'prev') goChapter(indexRef.current - 1)
+        if (data.key === 'prev') goChapter(indexRef.current - 1, '', 1)
         if (data.key === 'next') goChapter(indexRef.current + 1)
         return
       }
@@ -206,8 +211,20 @@ export default function App() {
   }, [goChapter])
 
   useEffect(() => {
+    const forward = (dir: 'next' | 'prev', unit: 'line' | 'page') => {
+      frameRef.current?.contentWindow?.postMessage({ type: 'epub-nav', dir, unit }, '*')
+    }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') goChapter(index - 1)
+      // Focus can sit on the chrome (toc, toolbar) while the chapter scrolls in
+      // the iframe, so vertical keys are forwarded to the chapter instead of
+      // being swallowed here.
+      if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+        event.preventDefault()
+        forward('next', event.key === 'PageDown' ? 'page' : 'line')
+      } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+        event.preventDefault()
+        forward('prev', event.key === 'PageUp' ? 'page' : 'line')
+      } else if (event.key === 'ArrowLeft') goChapter(index - 1, '', 1)
       else if (event.key === 'ArrowRight') goChapter(index + 1)
       else if (event.key === 'Escape') setImage(null)
     }
