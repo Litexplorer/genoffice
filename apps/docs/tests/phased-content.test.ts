@@ -10,6 +10,7 @@ import {
   setContentPhased,
   waitForFullContent,
   type PhasedContentHost,
+  type PhasedDocSource,
 } from '../src/renderer/phased-content'
 
 const docOf = (blocks: number): PmNode => ({
@@ -187,5 +188,80 @@ describe('setContentPhased', () => {
     } finally {
       document.removeEventListener(PHASED_CONTENT_SETTLED_EVENT, onSettled)
     }
+  })
+})
+
+/** a block model handed over as convertible ranges: records every conversion */
+function makeSource(blocks: number) {
+  const calls: Array<[number, number]> = []
+  const source: PhasedDocSource = {
+    length: blocks,
+    slice: (from, to) => {
+      calls.push([from, to])
+      return Array.from({ length: to - from }, (_, i) => ({
+        type: 'docParagraph',
+        attrs: { docxIndex: from + i },
+      }))
+    },
+  }
+  return { source, calls }
+}
+
+describe('setContentPhased with a convertible source', () => {
+  it('mounts a small source in one pass, converting it once', () => {
+    const { host, state } = makeHost()
+    const { source, calls } = makeSource(PHASED_MIN_BLOCKS)
+    const s = makeScheduler()
+    setContentPhased(host, source, s.schedule)
+    expect(calls).toEqual([[0, PHASED_MIN_BLOCKS]])
+    expect(state.events).toEqual([`set:${PHASED_MIN_BLOCKS}`])
+    expect(s.pending()).toBe(0)
+  })
+
+  it('converts each chunk just before it mounts instead of the whole document up front', async () => {
+    const blocks = PHASE1_BLOCKS + PHASE_CHUNK_BLOCKS * 2 + 7
+    const { host, state } = makeHost()
+    const { source, calls } = makeSource(blocks)
+    const s = makeScheduler()
+    setContentPhased(host, source, s.schedule)
+    // only the first mount has been converted so far
+    expect(calls).toEqual([[0, PHASE1_BLOCKS]])
+    while (s.pending() > 0) s.drain()
+    expect(calls).toEqual([
+      [0, PHASE1_BLOCKS],
+      [PHASE1_BLOCKS, PHASE1_BLOCKS + PHASE_CHUNK_BLOCKS],
+      [PHASE1_BLOCKS + PHASE_CHUNK_BLOCKS, PHASE1_BLOCKS + PHASE_CHUNK_BLOCKS * 2],
+      [PHASE1_BLOCKS + PHASE_CHUNK_BLOCKS * 2, blocks],
+    ])
+    expect(state.mounted.length).toBe(blocks)
+    expect(state.mounted.map((n) => n.attrs?.docxIndex)).toEqual(
+      Array.from({ length: blocks }, (_, i) => i),
+    )
+    await expect(waitForFullContent()).resolves.toBeUndefined()
+  })
+
+  it('remounts the whole document from the source when a chunk is refused', async () => {
+    const blocks = PHASE1_BLOCKS + PHASE_CHUNK_BLOCKS * 2
+    const { host, state } = makeHost()
+    const { source, calls } = makeSource(blocks)
+    const { appendNodes, setContent } = host
+    let appends = 0
+    host.appendNodes = (nodes) => {
+      if (++appends === 2) throw new Error('schema refused')
+      appendNodes(nodes)
+    }
+    host.setContent = (d) => {
+      setContent(d)
+      state.dirty = true
+    }
+    const s = makeScheduler()
+    setContentPhased(host, source, s.schedule)
+    state.dirty = false
+    while (s.pending() > 0) s.drain()
+    expect(calls.at(-1)).toEqual([0, blocks])
+    expect(state.mounted.length).toBe(blocks)
+    expect(state.dirty).toBe(false)
+    expect(state.loading).toBe(false)
+    await expect(waitForFullContent()).resolves.toBeUndefined()
   })
 })

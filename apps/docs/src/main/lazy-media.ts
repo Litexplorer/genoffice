@@ -48,6 +48,11 @@ const MIME: Record<string, string> = {
   bmp: 'image/bmp',
   webp: 'image/webp',
   svg: 'image/svg+xml',
+  // metafiles travel as bytes: the renderer rasterizes them on demand
+  emf: 'image/emf',
+  wmf: 'image/wmf',
+  emz: 'image/x-emz',
+  wmz: 'image/x-wmz',
 }
 
 function sha256File(path: string): Promise<string> {

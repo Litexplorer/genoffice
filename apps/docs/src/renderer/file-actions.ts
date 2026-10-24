@@ -56,6 +56,7 @@ import {
 import { hfSaveOptions } from './hf-sections'
 import { fetchDocBytes } from './doc-bytes'
 import { parseDocxOffThread } from './parse-off-thread'
+import { hasPendingMetafiles, whenMetafilesReady } from './editor/metafile-images'
 import { PHASED_APPEND } from './editor/streaming-tail-guard'
 import { docTextLength, docWeight, openTierFor } from './large-document'
 import { documentToMarkdown } from './export-markdown'
@@ -63,7 +64,13 @@ import { blocksHaveRevisions } from './editor/revision-view'
 import { docStyleCss } from './doc-style-css'
 import { setNoteNumFmts } from './note-format'
 import type { CompareEntry } from './editor/compare'
-import { blocksToPmDoc, pmDocOptions, pmDocToSavePlan, type PmNode } from './editor/convert'
+import {
+  blocksToPmDoc,
+  blocksToPmSource,
+  pmDocOptions,
+  pmDocToSavePlan,
+  type PmNode,
+} from './editor/convert'
 import { TABLE_TRAILING_SKIP, setLazyMediaHashes } from './editor/extensions'
 import { setStaticAsciiResolver } from './editor/protected-render'
 import { FORMAT_MARKS, serializeMarks } from './editor/caret-marks'
@@ -499,9 +506,11 @@ export async function loadFile(
     ctx.editor.storage.listNumbering.docDefaults = parsed.docDefaults
     ctx.editor.storage.listNumbering.defs = parsed.numbering
     applyDocLayoutSettings(ctx.editor, parsed)
+    // the block model goes over as convertible ranges: building every node up
+    // front blocked the first paint for as long as a 30k-block document takes
     setContentPhased(
       phasedHostFor(ctx),
-      blocksToPmDoc(parsed.blocks, readSections(parsed), pmDocOptions(parsed)),
+      blocksToPmSource(parsed.blocks, readSections(parsed), pmDocOptions(parsed)),
     )
     resetEditorHistory(ctx.editor)
     if (tier !== 'readOnly') focusDocumentStart(ctx.editor)
@@ -1297,6 +1306,11 @@ export function printDoc(ctx: FileActionContext): void {
     void waitForFullContent().then(() => printDoc(ctx))
     return
   }
+  // metafiles served lazily are rasterized before any sheet is printed
+  if (hasPendingMetafiles()) {
+    void whenMetafilesReady().then(() => printDoc(ctx))
+    return
+  }
   if (!document.querySelector('.pagination-preview')) {
     ctx.printAutoOpenedPreviewRef.current = true
     ctx.setShowPagePreview(true)
@@ -1396,6 +1410,8 @@ export async function exportPdf(ctx: FileActionContext, outPath?: string): Promi
   const { doc } = ctx
   if (!doc) return false
   await waitForFullContent()
+  // lazily served metafiles must be rasterized before the pages are captured
+  await whenMetafilesReady()
   if (printJobActive || ctx.pendingMixedExportRef.current) {
     ctx.setStatus(t('appExportingPdf'))
     return false
@@ -1491,6 +1507,7 @@ export async function exportImages(ctx: FileActionContext): Promise<boolean> {
   if (!doc) return false
   const target = await window.desktop.pickExportImagesTarget()
   if (!target) return false
+  await whenMetafilesReady()
   ctx.setStatus(t('appExportingImages'))
   const fail = (error: string) => {
     ctx.setStatus(t('appExportImagesFailed', { error }))
@@ -1568,6 +1585,7 @@ export async function exportHtml(ctx: FileActionContext, outPath?: string): Prom
   const { doc, editor } = ctx
   if (!doc || !editor) return false
   await waitForFullContent()
+  await whenMetafilesReady()
   ctx.setStatus(t('appExportingHtml'))
   const root = editor.view.dom as HTMLElement
   const textWidthPx = Number.parseFloat(
@@ -1594,6 +1612,7 @@ export async function exportMarkdown(ctx: FileActionContext, outPath?: string): 
   const { doc, editor } = ctx
   if (!doc || !editor) return false
   await waitForFullContent()
+  await whenMetafilesReady()
   ctx.setStatus(t('appExportingMarkdown'))
   const { markdown, images } = documentToMarkdown(editor)
   const result = await window.desktop.exportMarkdown(doc.fileName, markdown, images, outPath)

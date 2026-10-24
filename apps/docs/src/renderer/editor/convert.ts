@@ -75,6 +75,7 @@ import { parseRunBorderAttr } from './run-border'
 import { parseTextOutlineAttr } from './text-outline'
 import { charScaleXAttr, parseGlowAttr, parseTextEffectAttr } from './text-effects'
 import { SHAPE_INLINE_WRAP, shapeWrapOf } from './floating-z-order'
+import type { PhasedDocSource } from '../phased-content'
 
 /** minimal ProseMirror JSON shapes */
 export interface PmMark {
@@ -134,30 +135,45 @@ function redactLabelIn(rawRPr: string): string {
     .replace(/&amp;/g, '&')
 }
 
+/**
+ * The block model as convertible ranges: a phased open converts one chunk per
+ * frame instead of building every block node before the first screen paints.
+ */
+export function blocksToPmSource(
+  blocks: Block[],
+  sections?: SectionInfo[],
+  options: PmDocOptions = {},
+): PhasedDocSource {
+  const visible = blocks.filter((b) => !b.hidden)
+  const emptyNode = (): PmNode => ({
+    type: 'docParagraph',
+    attrs: { docxIndex: null, styleId: null, aiChanged: false },
+  })
+  return {
+    length: visible.length,
+    slice: (from, to) => {
+      if (visible.length === 0) return [emptyNode()]
+      return visible
+        .slice(from, to)
+        .map((block) =>
+          blockToPmNode(
+            block,
+            sectionRowCapTwips(sections, block.docxIndex),
+            sectionWidthBudget(sections, block.docxIndex),
+            options,
+          ),
+        )
+    },
+  }
+}
+
 export function blocksToPmDoc(
   blocks: Block[],
   sections?: SectionInfo[],
   options: PmDocOptions = {},
 ): PmNode {
-  const content: PmNode[] = []
-  for (const block of blocks) {
-    if (block.hidden) continue
-    content.push(
-      blockToPmNode(
-        block,
-        sectionRowCapTwips(sections, block.docxIndex),
-        sectionWidthBudget(sections, block.docxIndex),
-        options,
-      ),
-    )
-  }
-  if (content.length === 0) {
-    content.push({
-      type: 'docParagraph',
-      attrs: { docxIndex: null, styleId: null, aiChanged: false },
-    })
-  }
-  return { type: 'doc', content }
+  const source = blocksToPmSource(blocks, sections, options)
+  return { type: 'doc', content: source.slice(0, source.length) }
 }
 
 /** Word lays out RTL-script / run-rtl paragraphs with an RTL base direction even

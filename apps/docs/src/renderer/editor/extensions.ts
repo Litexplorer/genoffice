@@ -21,6 +21,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { appendsAtEnd, touchedTopLevelBlocks } from './touched-blocks'
 import { containsNode, localEditBlocks, touchedNeedsRecompute } from './local-edit'
 import { installProseMirrorPerf } from './prosemirror-perf'
+import { installMetafileImages, withMetafileSrc } from './metafile-images'
 import type { EditorView } from '@tiptap/pm/view'
 import {
   CellSelection,
@@ -1400,8 +1401,10 @@ export const DocInlineImage = Node.create({
     const attrs: Record<string, string> = {
       'data-inline-image': '1',
       class: 'doc-inline-img',
-      src: String(node.attrs.dataUrl),
     }
+    // a metafile part is served lazily as bytes: the picture gets a source once
+    // the renderer rasterizes it (metafile-images.ts), never as a pre-baked PNG
+    withMetafileSrc(attrs, String(node.attrs.dataUrl))
     const w = Number(node.attrs.widthPx)
     const h = Number(node.attrs.heightPx)
     const styles: string[] = []
@@ -5090,7 +5093,10 @@ function diagramSpecOf(diagram: DiagramDisplay): DomSpec {
           `top:${(s.fillRect.t * s.hPx).toFixed(1)}px;` +
           `width:${sw.toFixed(1)}px;height:${sh.toFixed(1)}px;max-width:none`
       }
-      kids.push(['img', { src: s.imageDataUrl, class: 'doc-diagram-img', style: imgStyle }])
+      kids.push([
+        'img',
+        withMetafileSrc({ class: 'doc-diagram-img', style: imgStyle }, String(s.imageDataUrl)),
+      ] as never)
     }
     if (s.texts?.length) {
       kids.push(['span', { class: 'doc-diagram-text' }, s.texts.join('\n')])
@@ -5724,9 +5730,9 @@ function protectedDomSpec(node: PmNode): DomSpec {
       }
     }
     const imgAttrs: Record<string, string> = {
-      src: String(imageDataUrl),
       class: 'doc-protected-img',
     }
+    withMetafileSrc(imgAttrs, String(imageDataUrl))
     const filterCss = pictureFilterCss(node.attrs.imageEffects as ImageEffects | null)
     // a side float capped by the wrapper's max-width scales, never squashes
     const sideFloat = !banded && /-(?:left|right)$/.test(String(imageWrap ?? ''))
@@ -5962,7 +5968,7 @@ function protectedDomSpec(node: PmNode): DomSpec {
       [
         'span',
         { class: 'doc-ole-wrap' },
-        ['img', { src: String(imageDataUrl), class: 'doc-ole-img', style: imgStyle }],
+        ['img', withMetafileSrc({ class: 'doc-ole-img', style: imgStyle }, String(imageDataUrl))],
       ],
     ]
   }
@@ -7554,8 +7560,31 @@ export const AutoLinkOnDelimiter = Extension.create({
   },
 })
 
+/**
+ * Lazily served metafiles (emf/wmf) carry no <img> source until the renderer
+ * rasterizes them: this installs the observer that fills each picture in as it
+ * appears, instead of the parse baking tens of megabytes of base64 into the
+ * model.
+ */
+const MetafileImageExtension = Extension.create({
+  name: 'metafileImages',
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('metafileImages'),
+        view: (view) => {
+          const stop = installMetafileImages(view.dom as HTMLElement)
+          return { destroy: stop }
+        },
+      }),
+    ]
+  },
+})
+
 export const editorExtensions = [
   StreamingTailGuardExtension,
+  MetafileImageExtension,
   ScriptFonts,
   DocDocument,
   DocText,

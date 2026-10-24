@@ -10,6 +10,10 @@ import type { PmNode } from './editor/convert'
  * the user already reads page 1 (the page count in the status bar grows as the
  * tail streams in, like Word's background pagination).
  *
+ * The node conversion rides along: callers pass a PhasedDocSource and each
+ * chunk is converted just before it mounts, instead of every block node being
+ * built before the first screen can paint.
+ *
  * While the tail streams the document is incomplete, so:
  * - the editor stays editable except at the append boundary (the streaming
  *   tail guard refuses edits in or after the last mounted block),
@@ -35,6 +39,39 @@ export interface PhasedContentHost {
 /** dispatched on document once a streamed tail has fully landed (layout
  *  measurers skip the tail's chunks and measure the whole document once) */
 export const PHASED_CONTENT_SETTLED_EVENT = 'genoffice:phased-content-settled'
+
+/**
+ * A document handed over as convertible ranges instead of a finished node tree:
+ * building every block node up front took seconds on a 30k-block document, so
+ * the conversion runs chunk by chunk with the mount instead of ahead of it.
+ */
+export interface PhasedDocSource {
+  /** top-level nodes the finished document holds */
+  length: number
+  /** convert top-level nodes [from, to); builds nothing outside the range */
+  slice(from: number, to: number): PmNode[]
+}
+
+/** wrap a finished node tree as a source (the pre-converted call shape) */
+function sourceOfDoc(pmDoc: PmNode): PhasedDocSource {
+  const content = pmDoc.content ?? []
+  return { length: content.length, slice: (from, to) => content.slice(from, to) }
+}
+
+function isSource(doc: PmNode | PhasedDocSource): doc is PhasedDocSource {
+  return typeof (doc as PhasedDocSource).slice === 'function'
+}
+
+/** the document over [from, to) of the source; a node keeps its own top-level attrs */
+function docSlice(
+  doc: PmNode | PhasedDocSource,
+  source: PhasedDocSource,
+  from = 0,
+  to = source.length,
+): PmNode {
+  const content = source.slice(from, to)
+  return isSource(doc) ? { type: 'doc', content } : { ...doc, content }
+}
 
 /** blocks in the first synchronous mount: overfills the first screens at any zoom */
 export const PHASE1_BLOCKS = 64
@@ -92,17 +129,18 @@ const nextPaintedFrame = (cb: () => void): void => {
 
 export function setContentPhased(
   host: PhasedContentHost,
-  pmDoc: PmNode,
+  doc: PmNode | PhasedDocSource,
   schedule: (cb: () => void) => void = nextPaintedFrame,
 ): void {
   cancelPhasedContent()
-  const content = pmDoc.content ?? []
+  // a source converts per chunk; a finished tree keeps the old slice behaviour
+  const source = isSource(doc) ? doc : sourceOfDoc(doc)
   const my = ++token
-  if (content.length <= PHASED_MIN_BLOCKS) {
-    host.setContent(pmDoc)
+  if (source.length <= PHASED_MIN_BLOCKS) {
+    host.setContent(docSlice(doc, source))
     return
   }
-  host.setContent({ ...pmDoc, content: content.slice(0, PHASE1_BLOCKS) })
+  host.setContent(docSlice(doc, source, 0, PHASE1_BLOCKS))
   let settle!: () => void
   settled = new Promise<void>((resolve) => (settle = resolve))
   host.setLoading(true)
@@ -130,7 +168,7 @@ export function setContentPhased(
   const appendChunk = () => {
     if (my !== token) return
     if (host.isDestroyed()) return finish()
-    const chunk = content.slice(index, index + PHASE_CHUNK_BLOCKS)
+    const chunk = source.slice(index, Math.min(index + PHASE_CHUNK_BLOCKS, source.length))
     index += chunk.length
     const wasDirty = host.getDirty()
     try {
@@ -139,7 +177,7 @@ export function setContentPhased(
       // a refused chunk falls back to the one-pass mount instead of leaving the file truncated
       remounted = true
       try {
-        host.setContent(pmDoc)
+        host.setContent(docSlice(doc, source))
       } catch {
         /* same failure as the one-pass path */
       }
@@ -147,7 +185,7 @@ export function setContentPhased(
       return finish()
     }
     host.setDirty(wasDirty)
-    if (index < content.length) schedule(appendChunk)
+    if (index < source.length) schedule(appendChunk)
     else finish()
   }
   schedule(appendChunk)

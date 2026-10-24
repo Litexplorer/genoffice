@@ -6,6 +6,14 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 // node_modules is a symlink into the main checkout, so bare specifiers would
 // silently bundle the other checkout's (possibly stale) code.
 const localAlias = {
+  // docx-engine re-exports the redaction tag constants from agent-core, which
+  // ships raw TS source: left external, the packaged main process requires a
+  // .ts file out of app.asar/node_modules and Node refuses to strip its types
+  // (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING) — the window then never opens.
+  '@genoffice/agent-core/redact-range': resolve(
+    __dirname,
+    '../../packages/agent-core/src/redact-range.ts',
+  ),
   '@genoffice/docx-engine/lazy-media': resolve(
     __dirname,
     '../../packages/docx-engine/src/lazy-media.ts',
@@ -13,6 +21,11 @@ const localAlias = {
   '@genoffice/docx-engine/zip-splice': resolve(
     __dirname,
     '../../packages/docx-engine/src/zip-splice.ts',
+  ),
+  // the renderer rasterizes lazily served metafiles on demand
+  '@genoffice/docx-engine/metafile': resolve(
+    __dirname,
+    '../../packages/docx-engine/src/metafile.ts',
   ),
   '@genoffice/docx-engine': resolve(__dirname, '../../packages/docx-engine/src/index.ts'),
 }
@@ -26,7 +39,12 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@genoffice/docx-engine', '@genoffice/electron-utils', '@genoffice/font-metrics'],
+        exclude: [
+          '@genoffice/docx-engine',
+          '@genoffice/agent-core',
+          '@genoffice/electron-utils',
+          '@genoffice/font-metrics',
+        ],
       }),
     ],
     resolve: { alias: localAlias },

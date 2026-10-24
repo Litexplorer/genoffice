@@ -8,6 +8,7 @@ import { parseDocx, saveDocx } from '../src/index'
 import {
   LAZY_MEDIA_PLACEHOLDER_BYTES,
   isLazyMediaPart,
+  isMetafilePartPath,
   lazyMediaHashOf,
   lazyMediaPlaceholder,
   lazyMediaUrl,
@@ -79,11 +80,15 @@ describe('lazy media placeholders', () => {
     expect(() => lazyMediaPlaceholder('nope')).toThrow()
   })
 
-  it('only browser-decodable word/media pictures are lazy', () => {
+  it('lazies every word/media picture, metafiles included', () => {
     expect(isLazyMediaPart('word/media/image1.png')).toBe(true)
+    expect(isLazyMediaPart('word/media/image1.emf')).toBe(true)
+    expect(isLazyMediaPart('word/media/image9.WMZ')).toBe(true)
+    // spaces are not addressable in a lazy-media URL
     expect(isLazyMediaPart('word/media/Image 1.JPG')).toBe(false)
-    expect(isLazyMediaPart('word/media/image1.emf')).toBe(false)
     expect(isLazyMediaPart('word/embeddings/oleObject1.bin')).toBe(false)
+    expect(isMetafilePartPath('word/media/image1.emf')).toBe(true)
+    expect(isMetafilePartPath('word/media/image1.png')).toBe(false)
   })
 
   it('builds and parses URLs', () => {
@@ -168,15 +173,20 @@ describe('zip splice', () => {
       expect(await slimDocx(file, HASH, 1 << 20)).toBeNull()
       const slim = await slimDocx(file, HASH, 1024)
       expect(slim).not.toBeNull()
-      expect(slim!.lazyParts.sort()).toEqual(['word/media/image1.png', 'word/media/image2.png'])
+      expect(slim!.lazyParts.sort()).toEqual([
+        'word/media/image1.png',
+        'word/media/image2.png',
+        'word/media/image3.emf',
+      ])
 
       const slimZip = await JSZip.loadAsync(slim!.bytes)
       expect(
         lazyMediaHashOf(await slimZip.file('word/media/image1.png')!.async('uint8array')),
       ).toBe(HASH)
-      expect((await slimZip.file('word/media/image3.emf')!.async('uint8array')).length).toBe(
-        big.length,
-      )
+      // the metafile is a placeholder too: rasterized on demand, not in the parse
+      expect(
+        lazyMediaHashOf(await slimZip.file('word/media/image3.emf')!.async('uint8array')),
+      ).toBe(HASH)
       expect(await lazyMediaHashesIn(slim!.bytes)).toEqual(new Set([HASH]))
 
       const part = file.entries.get('word/media/image2.png')!
@@ -216,6 +226,41 @@ describe('zip splice', () => {
       const untouched = Buffer.from(original)
       expect(await materializeDocx(untouched, sourceFor)).toBe(untouched)
       await expect(materializeDocx(saved, async () => null)).rejects.toThrow(/source unavailable/)
+    } finally {
+      await file.close()
+    }
+  })
+
+  it('parses a referenced metafile placeholder as a lazy URL, not a raster', async () => {
+    const emf = Buffer.alloc(2048, 9)
+    const body =
+      '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/>' +
+      '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+      '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic><pic:blipFill><a:blip r:embed="rId12"/></pic:blipFill></pic:pic>' +
+      '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'
+    const original = await buildDocx({
+      bodyXml: body,
+      extraRels:
+        '<Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image12.emf"/>',
+      binaryParts: [
+        {
+          path: 'word/media/image12.emf',
+          base64: emf.toString('base64'),
+          extension: 'emf',
+          contentType: 'image/x-emf',
+        },
+      ],
+    })
+    const { file } = await tempZipFile(original)
+    try {
+      const slim = await slimDocx(file, HASH, 1024)
+      expect(slim).not.toBeNull()
+      expect(slim!.lazyParts).toContain('word/media/image12.emf')
+      const parsed = await parseDocx(slim!.bytes)
+      const image = parsed.blocks.find((b) => b.type === 'image')!
+      // the placeholder is served, never rasterized during the parse
+      expect(image.imageDataUrl).toBe(lazyMediaUrl(HASH, 'word/media/image12.emf'))
     } finally {
       await file.close()
     }

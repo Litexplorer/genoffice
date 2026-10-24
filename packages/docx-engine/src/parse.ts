@@ -7914,6 +7914,10 @@ async function readMediaPartDataUrl(zip: JSZip, partPath: string): Promise<strin
   if (!file) return null
   const mime = await imagePartMime(zip, partPath)
   if (!mime) return null
+  // a lazy placeholder names the source part whatever its format: converting
+  // the 72-byte placeholder as if it were the picture would drop the image
+  const lazy = await lazyPartSrc(zip, file, partPath)
+  if (lazy) return lazy
   if (isMetafileMime(mime)) return metafileToDataUrl(await file.async('arraybuffer'), mime)
   if (isTiffMime(mime)) return tiffToDataUrlAsync(await file.async('arraybuffer'))
   return mediaPartSrc(zip, file, partPath, mime)
@@ -7925,23 +7929,31 @@ const lazyHashesByZip = new WeakMap<JSZip, Set<string>>()
 /** w:altChunk HTML/MHT parts left unexpanded because no converter is installed */
 const unconvertedChunksByZip = new WeakMap<JSZip, number>()
 
+/** the lazy URL when this part is a placeholder for bytes left in the file */
+async function lazyPartSrc(
+  zip: JSZip,
+  file: JSZipObject,
+  partPath: string,
+): Promise<string | null> {
+  const declared = (file as unknown as { _data?: { uncompressedSize?: number } })._data
+    ?.uncompressedSize
+  if (declared !== LAZY_MEDIA_PLACEHOLDER_BYTES) return null
+  const hash = lazyMediaHashOf(await file.async('uint8array'))
+  if (!hash) return null
+  let seen = lazyHashesByZip.get(zip)
+  if (!seen) lazyHashesByZip.set(zip, (seen = new Set()))
+  seen.add(hash)
+  return lazyMediaUrl(hash, partPath)
+}
+
 async function mediaPartSrc(
   zip: JSZip,
   file: JSZipObject,
   partPath: string,
   mime: string,
 ): Promise<string> {
-  const declared = (file as unknown as { _data?: { uncompressedSize?: number } })._data
-    ?.uncompressedSize
-  if (declared === LAZY_MEDIA_PLACEHOLDER_BYTES) {
-    const hash = lazyMediaHashOf(await file.async('uint8array'))
-    if (hash) {
-      let seen = lazyHashesByZip.get(zip)
-      if (!seen) lazyHashesByZip.set(zip, (seen = new Set()))
-      seen.add(hash)
-      return lazyMediaUrl(hash, partPath)
-    }
-  }
+  const lazy = await lazyPartSrc(zip, file, partPath)
+  if (lazy) return lazy
   return `data:${mime};base64,${await file.async('base64')}`
 }
 
@@ -8357,6 +8369,9 @@ async function extractDiagramDrawing(
     if (!f) return null
     const mime = await imagePartMime(ctx.zip, path)
     if (!mime) return null
+    // a slimmed document holds placeholders for diagram pictures too
+    const lazy = await lazyPartSrc(ctx.zip, f, path)
+    if (lazy) return lazy
     if (isMetafileMime(mime)) return metafileToDataUrl(await f.async('arraybuffer'), mime)
     return mediaPartSrc(ctx.zip, f, path, mime)
   }
@@ -8473,7 +8488,11 @@ async function oleDisplay(
   const file = path ? ctx.zip.file(path) : null
   if (file && path) {
     const mime = await imagePartMime(ctx.zip, path)
-    if (isMetafileMime(mime)) {
+    // the preview picture may be a placeholder left in the source file
+    const lazy = await lazyPartSrc(ctx.zip, file, path)
+    if (lazy) {
+      out.imageDataUrl = lazy
+    } else if (isMetafileMime(mime)) {
       const converted = await metafileToDataUrl(await file.async('arraybuffer'), mime)
       if (converted) out.imageDataUrl = converted
     } else if (mime) {

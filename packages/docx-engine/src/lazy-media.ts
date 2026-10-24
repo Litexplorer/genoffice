@@ -27,9 +27,27 @@ export function lazyMediaHashOf(bytes: Uint8Array): string | null {
   return HASH_RE.test(hash) ? hash : null
 }
 
-/** pictures Chromium decodes itself; emf/wmf/tiff need their bytes in the renderer */
+/**
+ * Pictures that stay in the source file and are served by URL.
+ *
+ * Chromium decodes the first group itself. Metafiles (emf/wmf, and their
+ * gzipped emz/wmz forms) cannot be shown by an <img> at all, so they used to
+ * travel inside the model as pre-rasterized PNG data URLs — a 1 GB of EMF in a
+ * 58 MB document became 117 MB of base64, inflated and rasterized during the
+ * parse. They are served lazily too and rasterized on demand in the renderer
+ * (see apps/docs metafile-images.ts).
+ */
 export function isLazyMediaPart(partPath: string): boolean {
-  return /^word\/media\/[\x21-\x7e]+\.(?:png|jpe?g|gif|bmp|webp|svg)$/i.test(partPath)
+  return /^word\/media\/[\x21-\x7e]+\.(?:png|jpe?g|gif|bmp|webp|svg|emf|wmf|emz|wmz)$/i.test(
+    partPath,
+  )
+}
+
+/** metafile extensions among the lazy parts: an <img> needs a rasterized PNG */
+const METAFILE_PART_RE = /\.(?:emf|wmf|emz|wmz)$/i
+
+export function isMetafilePartPath(partPath: string): boolean {
+  return METAFILE_PART_RE.test(partPath)
 }
 
 /** Max lazy-media part path chars served from the source archive. */

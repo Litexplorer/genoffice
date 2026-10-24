@@ -406,6 +406,12 @@ import {
 } from './file-actions'
 import { BlockIndex } from './pagination-index'
 import { isPhasedContentPending } from './phased-content'
+import {
+  collectGapBands,
+  compileGapBands,
+  gapAboveAt,
+  type GapBandIndex,
+} from './pagination-gap-bands'
 import { sameSectionInfos } from './pagination-sections'
 import {
   blocksKeepSlicing,
@@ -816,6 +822,14 @@ export function App() {
   )
   const [status, setStatus] = useState('')
   const [zoom, setZoom] = useState(100)
+  // A zoom is a pure repaint: pagination measures the canvas at zoom 1, so its
+  // result cannot depend on the zoom. The pagination effect therefore no longer
+  // re-runs on zoom (that ran two whole-document passes, ~9 s of blocking on a
+  // 294-page document); it reads the live zoom through this ref and exposes the
+  // viewport-only refresh below.
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const zoomRefreshRef = useRef<(() => void) | null>(null)
   const scrollContainerRef = useRef<HTMLElement>(null)
   /** bumps after every pagination pass: the canvas' page gaps are in place */
   const [layoutRev, setLayoutRev] = useState(0)
@@ -3633,7 +3647,7 @@ export function App() {
     // to park a paragraph in the wrong column of an unequal-width section
     // (genoffice#1970). Passes measure the canvas at zoom 1 and restore the
     // view zoom before the viewport-dependent reads (locate).
-    let factor = zoom / 100
+    let factor = zoomRef.current / 100
     const mTopPx = canvasTop
     // shared paper = the widest section's page; narrower pages are centered on it
     const paperWPx = paperWidthPx(sections, sections[0]?.settings ?? section)
@@ -3666,6 +3680,13 @@ export function App() {
     let charSpaceSig = ''
     const colWidthPass = newWidthPassState()
     const pmEl = () => document.querySelector('.editor-scroll .ProseMirror') as HTMLElement | null
+    // page-gap bands of the current layout: collected once per pass, queried by
+    // binary search on scroll. Re-querying the DOM here made every scroll cost
+    // O(pages) layout reads on a long document.
+    let gapIndex: GapBandIndex | null = null
+    /** flow height when the bands were taken: a late layout change (a face
+     *  loading, an image resizing) moves the bands and demands a rebuild */
+    let gapIndexHeight = 0
     const locate = () => {
       const pm = pmEl()
       if (!pm || slices.length === 0) return
@@ -3689,21 +3710,23 @@ export function App() {
       // only the former maps the midpoint onto the page shown there. Its
       // repeated-header clones are float content (the carry covers only the
       // gap bands; the continuation's page starts at the gap's bottom)
-      let gapAbove = 0
+      if (!gapIndex || pmRect.height !== gapIndexHeight) {
+        gapIndex = compileGapBands(
+          collectGapBands(
+            pm,
+            factor,
+            (el) => el.classList.contains('page-repeat-header') && insideFloatTable(el),
+          ),
+        )
+        gapIndexHeight = pm.getBoundingClientRect().height
+      }
       // mixed-column pages pull their gap (and everything below) up over the
       // vacated stacked space: add that back to land in the gapless coordinates
-      let pullUpAbove = 0
-      for (const gap of pm.querySelectorAll<HTMLElement>(
-        '.page-gap:not(.page-gap-carry), .page-repeat-header',
-      )) {
-        if (gap.classList.contains('page-repeat-header') && insideFloatTable(gap)) continue
-        const r = gap.getBoundingClientRect()
-        if (r.top < midScreen) {
-          gapAbove += Math.min(r.height, midScreen - r.top)
-          pullUpAbove += Math.max(0, -parseFloat(gap.style.marginTop) || 0)
-        }
-      }
-      const midY = (midScreen - origin - gapAbove) / factor + pullUpAbove
+      const { above: gapAbove, pull: pullUpAbove } = gapAboveAt(
+        gapIndex,
+        (midScreen - pmRect.top) / factor,
+      )
+      const midY = (midScreen - origin) / factor - gapAbove + pullUpAbove
       // visible-page numbering so the status bar and F9 NUMPAGES agree with the gap widgets
       const current = visiblePageCount(slices, pageAt(slices, midY))
       const total = visiblePageCount(slices)
@@ -3711,6 +3734,16 @@ export function App() {
         prev.current === current && prev.total === total ? prev : { current, total },
       )
     }
+    // a zoom only repaints: refresh the viewport-dependent reads here instead of
+    // re-running this effect (which remeasured the whole document, twice)
+    const refreshForZoom = () => {
+      factor = zoomRef.current / 100
+      // gaps are stored in zoom-1 px and queried through the live zoom, but the
+      // flow height changed with the zoom: take the bands again
+      gapIndex = null
+      locate()
+    }
+    zoomRefreshRef.current = refreshForZoom
     let lastPassAt = 0
     let lastPassMs = 0
     let lastBlocks: BlockBox[] = []
@@ -3861,6 +3894,9 @@ export function App() {
       if (disposed) return
       timer = null
       lastPassAt = performance.now()
+      // this pass rewrites the page gaps: the bands measured from the previous
+      // layout are stale from here on (locate rebuilds them on the next call)
+      gapIndex = null
       const edited = fastEdits
       fastEdits = new Set()
       const dirty = dirtyFrom
@@ -3870,7 +3906,7 @@ export function App() {
         // the canvas zoom as applied, not this closure's: a pass reaching the
         // DOM through a late async callback must never read a zoomed canvas at
         // factor 1 (split-row fills then land in zoomed px and rows overlap)
-        const liveZoom = canvasZoomOf(zoomEl, zoom / 100)
+        const liveZoom = canvasZoomOf(zoomEl, zoomRef.current / 100)
         const swapZoom = zoomEl !== null && Math.abs(liveZoom - 1) > 0.0001
         const scrollTop = scroller.scrollTop
         const scrollLeft = scroller.scrollLeft
@@ -5170,7 +5206,17 @@ export function App() {
     document.fonts.ready.then(() => onFontsChanged(fontsLoading)).catch(() => {})
     const onLoadingDone = () => onFontsChanged(true)
     document.fonts.addEventListener('loadingdone', onLoadingDone)
-    scroller.addEventListener('scroll', locate, { passive: true })
+    // one relocate per frame: a trackpad fling fires scroll far more often than
+    // the page number can change, and every relocate is a layout read
+    let locateFrame = 0
+    const onScroll = () => {
+      if (locateFrame) return
+      locateFrame = requestAnimationFrame(() => {
+        locateFrame = 0
+        locate()
+      })
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
     const onDocUpdate = ({ transaction }: { transaction: Transaction }) => {
       resetWidthPassHistory(colWidthPass)
       onUpdate(singleInlineEditIndex(transaction), firstChangedTopLevelIndex(transaction))
@@ -5210,15 +5256,16 @@ export function App() {
       if (timer) window.clearTimeout(timer)
       if (hfTimer) window.clearTimeout(hfTimer)
       document.fonts.removeEventListener('loadingdone', onLoadingDone)
-      scroller.removeEventListener('scroll', locate)
+      scroller.removeEventListener('scroll', onScroll)
+      if (locateFrame) cancelAnimationFrame(locateFrame)
       editor?.off('update', onDocUpdate)
       editor?.off('transaction', onShrinkTr)
+      if (zoomRefreshRef.current === refreshForZoom) zoomRefreshRef.current = null
     }
   }, [
     doc,
     section,
     sections,
-    zoom,
     editor,
     viewMode,
     readMode,
@@ -5250,6 +5297,14 @@ export function App() {
     delSectBreaks,
     pendingWatermarkImage,
   ])
+
+  // Zoom repaints; it does not repaginate (the effect above measures the canvas
+  // at zoom 1, so its result cannot change with the zoom). Only the
+  // viewport-dependent reads follow the new zoom.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => zoomRefreshRef.current?.())
+    return () => cancelAnimationFrame(raf)
+  }, [zoom])
 
   // section at the cursor: the target the Layout tab acts on
   useEffect(() => {
