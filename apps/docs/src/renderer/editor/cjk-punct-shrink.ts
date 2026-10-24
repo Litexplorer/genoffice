@@ -121,6 +121,40 @@ const PARA_CHAR_BUDGET = 4000
 
 const MEASURE_RETRY_MAX = 10
 const MEASURE_SIGS_MAX = 12
+/** above this many candidate paragraphs the walk is sliced across idle frames */
+const MEASURE_SLICE_MIN_PARAS = 400
+/** longest single slice (ms): keeps input and scrolling responsive */
+const MEASURE_SLICE_BUDGET_MS = 10
+
+interface SliceSlot {
+  idle: number | null
+  timer: ReturnType<typeof setTimeout> | null
+}
+
+/** one idle slice of a long walk; a timer stands in where idle callbacks are absent */
+function scheduleSlice(
+  cb: (deadline?: { timeRemaining?: () => number }) => void,
+  slot: SliceSlot,
+): void {
+  const ric = (
+    globalThis as {
+      requestIdleCallback?: (
+        cb: (d: { timeRemaining(): number }) => void,
+        o?: { timeout: number },
+      ) => number
+    }
+  ).requestIdleCallback
+  if (typeof ric === 'function') slot.idle = ric(cb, { timeout: 200 })
+  else slot.timer = setTimeout(() => cb(), 16)
+}
+
+function cancelSlice(slot: SliceSlot): void {
+  const cic = (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback
+  if (slot.idle !== null && typeof cic === 'function') cic(slot.idle)
+  if (slot.timer !== null) clearTimeout(slot.timer)
+  slot.idle = null
+  slot.timer = null
+}
 
 export interface CjkPunctShrinkStorage {
   /** settings.xml characterSpacingControl compresses punctuation */
@@ -401,6 +435,13 @@ class CjkPunctShrinkView {
   private frozen = false
   private retryRaf = 0
   private retries = 0
+  /** bumps whenever a measure starts: a sliced run keeps only the newest */
+  private measureRun = 0
+  /** pending slice of the large-document walk (idle callback or timer) */
+  private slice: { idle: number | null; timer: ReturnType<typeof setTimeout> | null } = {
+    idle: null,
+    timer: null,
+  }
   private resizeObserver?: ResizeObserver
   private lastDomWidth = -1
   private onFontsLoaded = () => {
@@ -471,6 +512,9 @@ class CjkPunctShrinkView {
     document.removeEventListener(PHASED_CONTENT_SETTLED_EVENT, this.onPhasedSettled)
     this.resizeObserver?.disconnect()
     if (this.retryRaf) cancelAnimationFrame(this.retryRaf)
+    // a sliced walk belongs to the destroyed view
+    this.measureRun++
+    cancelSlice(this.slice)
   }
 
   private scheduleRetry() {
@@ -480,6 +524,11 @@ class CjkPunctShrinkView {
       this.retryRaf = 0
       this.measure()
     })
+  }
+
+  /** drop the pending slice of a superseded walk */
+  private cancelSlices(): void {
+    cancelSlice(this.slice)
   }
 
   private measure() {
@@ -523,6 +572,48 @@ class CjkPunctShrinkView {
     let measurable = paras.length === 0
     this.results.beginPass(view)
     const topLevel = SettledParagraphCache.topLevelDom(view)
+    const run = ++this.measureRun
+    this.cancelSlices()
+    // a settled streamed open measures thousands of paragraphs: one synchronous
+    // walk froze the UI for ~14 s on a 294-page document, so long walks run in
+    // idle slices and dispatch once at the end
+    if (paras.length > MEASURE_SLICE_MIN_PARAS) {
+      let index = 0
+      const step = (deadline?: { timeRemaining?: () => number }) => {
+        this.slice.idle = null
+        this.slice.timer = null
+        if (run !== this.measureRun || this.view.isDestroyed || isPhasedContentPending()) return
+        const budget = deadline?.timeRemaining
+          ? Math.min(MEASURE_SLICE_BUDGET_MS, Math.max(0, deadline.timeRemaining() - 2))
+          : MEASURE_SLICE_BUDGET_MS
+        const started = performance.now()
+        for (; index < paras.length; index++) {
+          const para = paras[index]
+          const measured = this.results.measure(
+            view,
+            para.node,
+            para.pos,
+            (el) => this.measureParagraph(para.node, para.pos, el),
+            topLevel.get(para.node),
+          )
+          if (measured) {
+            measurable = true
+            shrinks.push(...measured)
+          }
+          if (performance.now() - started > budget) {
+            index++
+            break
+          }
+        }
+        if (index < paras.length) {
+          scheduleSlice(step, this.slice)
+          return
+        }
+        this.apply(shrinks, measurable, old)
+      }
+      scheduleSlice(step, this.slice)
+      return
+    }
     for (const para of paras) {
       const measured = this.results.measure(
         view,
@@ -535,6 +626,16 @@ class CjkPunctShrinkView {
       measurable = true
       shrinks.push(...measured)
     }
+    this.apply(shrinks, measurable, old)
+  }
+
+  /** dispatch the settled shrink decorations (shared by both walk lengths) */
+  private apply(
+    shrinks: MeasuredShrink[],
+    measurable: boolean,
+    old: DecorationSet | null | undefined,
+  ) {
+    const { view } = this
     if (!measurable) {
       this.scheduleRetry()
       return

@@ -5093,10 +5093,9 @@ function diagramSpecOf(diagram: DiagramDisplay): DomSpec {
           `top:${(s.fillRect.t * s.hPx).toFixed(1)}px;` +
           `width:${sw.toFixed(1)}px;height:${sh.toFixed(1)}px;max-width:none`
       }
-      kids.push([
-        'img',
-        withMetafileSrc({ class: 'doc-diagram-img', style: imgStyle }, String(s.imageDataUrl)),
-      ] as never)
+      const diagramImg: Record<string, string> = { class: 'doc-diagram-img', style: imgStyle }
+      withMetafileSrc(diagramImg, String(s.imageDataUrl))
+      kids.push(['img', diagramImg])
     }
     if (s.texts?.length) {
       kids.push(['span', { class: 'doc-diagram-text' }, s.texts.join('\n')])
@@ -5962,15 +5961,9 @@ function protectedDomSpec(node: PmNode): DomSpec {
     let imgStyle = ''
     if (imageWidthPx) imgStyle += `width:${Number(imageWidthPx)}px;`
     if (imageHeightPx) imgStyle += `height:${Number(imageHeightPx)}px;`
-    return [
-      'div',
-      attrs,
-      [
-        'span',
-        { class: 'doc-ole-wrap' },
-        ['img', withMetafileSrc({ class: 'doc-ole-img', style: imgStyle }, String(imageDataUrl))],
-      ],
-    ]
+    const oleImg: Record<string, string> = { class: 'doc-ole-img', style: imgStyle }
+    withMetafileSrc(oleImg, String(imageDataUrl))
+    return ['div', attrs, ['span', { class: 'doc-ole-wrap' }, ['img', oleImg]]]
   }
   const children: unknown[] = [
     [

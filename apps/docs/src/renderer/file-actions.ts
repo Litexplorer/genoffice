@@ -619,6 +619,8 @@ export async function loadFile(
     return 'ok'
   } catch (err) {
     if (generation !== openGeneration) return 'superseded'
+    // keep the stack in the console: the status line only carries the message
+    console.error('loadFile failed', err)
     // visible failure: the status-bar line alone is easy to miss under the start screen
     ctx.setStatus(t('appOpenFailed', { error: String(err) }))
     showToast(t('appOpenFailed', { error: String(err) }), 'error')

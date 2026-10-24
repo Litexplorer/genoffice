@@ -1,4 +1,7 @@
+import { Editor } from '@tiptap/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { editorExtensions } from '../src/renderer/editor/extensions'
+import { runSpanSpecs } from '../src/renderer/editor/protected-render'
 import {
   installMetafileImages,
   metafileLazyUrl,
@@ -75,5 +78,44 @@ describe('installMetafileImages', () => {
     expect(img.dataset.metafileSrc).toBeUndefined()
     stop()
     root.remove()
+  })
+})
+
+describe('metafile pictures in the render specs', () => {
+  const HASH = 'b'.repeat(64)
+  const emfUrl = `genoffice-docx-media://${HASH}/word/media/image9.emf`
+
+  it('renders an inline metafile picture with a deferred source', () => {
+    const editor = new Editor({
+      element: document.createElement('div'),
+      extensions: editorExtensions,
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'docParagraph',
+            attrs: { docxIndex: 0 },
+            content: [
+              { type: 'docInlineImage', attrs: { dataUrl: emfUrl, widthPx: 120, heightPx: 80 } },
+            ],
+          },
+        ],
+      },
+    })
+    const img = editor.view.dom.querySelector('img.doc-inline-img')
+    expect(img?.getAttribute('data-metafile-src')).toBe(emfUrl)
+    expect(img?.getAttribute('src')).toBeNull()
+    editor.destroy()
+  })
+
+  it('renders a protected (non-editable) metafile run with a deferred source', () => {
+    const specs = runSpanSpecs({
+      text: '',
+      image: { dataUrl: emfUrl, widthPx: 40, heightPx: 30, xml: '<w:drawing/>' },
+    })
+    const spec = specs.find((s) => Array.isArray(s) && s[0] === 'img')
+    expect(spec).toBeDefined()
+    // an undefined attrs object would make ProseMirror's serializer throw
+    expect(spec?.[1]).toMatchObject({ 'data-metafile-src': emfUrl })
   })
 })

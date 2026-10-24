@@ -1,5 +1,6 @@
 import { isMetafilePartPath, parseLazyMediaUrl } from '@genoffice/docx-engine/lazy-media'
 import { isMetafileMime, metafileToDataUrl } from '@genoffice/docx-engine/metafile'
+import type { MetafileWorkerRequest, MetafileWorkerResponse } from '../metafile-worker'
 
 /**
  * On-demand rasterization of lazily served metafiles.
@@ -16,6 +17,61 @@ import { isMetafileMime, metafileToDataUrl } from '@genoffice/docx-engine/metafi
 export const METAFILE_RASTER_MAX_PX = 1600
 /** conversions in flight; more would contend with typing and pagination */
 const MAX_CONCURRENT = 2
+/** a picture that never finishes converting must not wedge the queue */
+const CONVERT_TIMEOUT_MS = 30_000
+
+let worker: Worker | null = null
+let nextJob = 0
+const inflight = new Map<number, (url: string | null) => void>()
+
+/** the conversion worker, or null when the platform has none (tests, fallback) */
+function getWorker(): Worker | null {
+  if (worker) return worker
+  if (typeof Worker === 'undefined') return null
+  try {
+    worker = new Worker(new URL('../metafile-worker.ts', import.meta.url), { type: 'module' })
+  } catch {
+    return null
+  }
+  worker.onmessage = (e: MessageEvent<MetafileWorkerResponse>) => {
+    const resolve = inflight.get(e.data.id)
+    if (!resolve) return
+    inflight.delete(e.data.id)
+    resolve(e.data.url)
+  }
+  // a crashed converter fails its waiting pictures and starts a fresh worker
+  worker.onerror = () => {
+    for (const resolve of inflight.values()) resolve(null)
+    inflight.clear()
+    worker?.terminate()
+    worker = null
+  }
+  return worker
+}
+
+/** rasterize off the UI thread: the encode step can be seconds of canvas work */
+function rasterizeInWorker(bytes: ArrayBuffer, mime: string): Promise<string | null> {
+  const w = getWorker()
+  if (!w)
+    return Promise.resolve(
+      metafileToDataUrl(new Uint8Array(bytes), mime, { maxSidePx: METAFILE_RASTER_MAX_PX }),
+    )
+  const id = ++nextJob
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      inflight.delete(id)
+      resolve(null)
+    }, CONVERT_TIMEOUT_MS)
+    inflight.set(id, (url) => {
+      clearTimeout(timer)
+      resolve(url)
+    })
+    w.postMessage(
+      { id, bytes, mime, maxSidePx: METAFILE_RASTER_MAX_PX } satisfies MetafileWorkerRequest,
+      [bytes],
+    )
+  })
+}
 
 const MIME_BY_EXT: Record<string, string> = {
   emf: 'image/emf',
@@ -63,15 +119,17 @@ export function rasterizeMetafile(url: string): Promise<string | null> {
     if (!isMetafileMime(mime)) return null
     const res = await fetch(url)
     if (!res.ok) return null
-    return metafileToDataUrl(new Uint8Array(await res.arrayBuffer()), mime, {
-      maxSidePx: METAFILE_RASTER_MAX_PX,
-    })
+    return rasterizeInWorker(await res.arrayBuffer(), mime)
   })().catch(() => null)
   converted.set(url, pending)
   return pending
 }
 
 let queue: HTMLImageElement[] = []
+/** pictures already picked up: a reader that mounts a second editor (document
+ *  swap, tab reuse) must not enqueue the same node twice — and must not lose
+ *  the tail a previous observer had queued */
+const queued = new WeakSet<HTMLImageElement>()
 let active = 0
 let timer: ReturnType<typeof setTimeout> | null = null
 let waiters: Array<() => void> = []
@@ -131,8 +189,8 @@ function collect(node: Element | null): void {
       ? [node]
       : Array.from(node.querySelectorAll<HTMLImageElement>('img[data-metafile-src]'))
   for (const img of imgs) {
-    if (img.dataset.metafileQueued) continue
-    img.dataset.metafileQueued = '1'
+    if (queued.has(img)) continue
+    queued.add(img)
     queue.push(img)
   }
   if (imgs.length > 0) schedule()
@@ -152,7 +210,6 @@ export function installMetafileImages(root: HTMLElement): () => void {
   observer.observe(root, { childList: true, subtree: true })
   return () => {
     observer.disconnect()
-    queue = []
   }
 }
 
