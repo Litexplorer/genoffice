@@ -2873,8 +2873,14 @@ th.cell-rev-del {
 /* Offscreen top-level blocks are not laid out or painted: the renderer keeps
    their last real size (`auto`) and only builds the ones near the viewport.
    Pagination must read true geometry, so every measuring state below turns
-   this off; `data-doc-cv="off"` on <html> is the kill switch. */
-html:not([data-doc-cv='off'])
+   this off.
+
+   OFF by default: measured on a 294-page document, scrolling half the document
+   ran at 13 fps with 62 long tasks (4.3 s of stalls) against 60 fps and none
+   with this rule removed — Chromium re-lays each re-entering block while the
+   page-gap widgets shift around it. Kept as an opt-in switch
+   (`document.documentElement.dataset.docCv = 'on'`) until the churn is solved. */
+html[data-doc-cv='on']
   .editor-scroll
   .doc-page:not(.measuring-natural):not(.measuring-columns)
   > * {

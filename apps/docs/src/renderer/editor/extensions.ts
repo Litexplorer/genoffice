@@ -5737,6 +5737,8 @@ function protectedDomSpec(node: PmNode): DomSpec {
     }
     const imgAttrs: Record<string, string> = {
       class: 'doc-protected-img',
+      loading: 'lazy',
+      decoding: 'async',
     }
     withMetafileSrc(imgAttrs, String(imageDataUrl))
     const filterCss = pictureFilterCss(node.attrs.imageEffects as ImageEffects | null)
