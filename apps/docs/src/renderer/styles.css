@@ -2870,6 +2870,18 @@ th.cell-rev-del {
   display: none !important;
 }
 
+/* Offscreen top-level blocks are not laid out or painted: the renderer keeps
+   their last real size (`auto`) and only builds the ones near the viewport.
+   Pagination must read true geometry, so every measuring state below turns
+   this off; `data-doc-cv="off"` on <html> is the kill switch. */
+html:not([data-doc-cv='off'])
+  .editor-scroll
+  .doc-page:not(.measuring-natural):not(.measuring-columns)
+  > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+
 /* phantom table rows (gap rows, repeated header clones) must keep their grid
    slot while hidden: syncPhantomRowspans grew the vMerge rowspans crossing
    them, so a display:none row makes those spans overrun by one row and shifts

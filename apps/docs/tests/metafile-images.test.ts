@@ -105,6 +105,9 @@ describe('metafile pictures in the render specs', () => {
     const img = editor.view.dom.querySelector('img.doc-inline-img')
     expect(img?.getAttribute('data-metafile-src')).toBe(emfUrl)
     expect(img?.getAttribute('src')).toBeNull()
+    // offscreen pictures load and decode only when they are needed
+    expect(img?.getAttribute('loading')).toBe('lazy')
+    expect(img?.getAttribute('decoding')).toBe('async')
     editor.destroy()
   })
 
@@ -116,6 +119,10 @@ describe('metafile pictures in the render specs', () => {
     const spec = specs.find((s) => Array.isArray(s) && s[0] === 'img')
     expect(spec).toBeDefined()
     // an undefined attrs object would make ProseMirror's serializer throw
-    expect(spec?.[1]).toMatchObject({ 'data-metafile-src': emfUrl })
+    expect(spec?.[1]).toMatchObject({
+      'data-metafile-src': emfUrl,
+      loading: 'lazy',
+      decoding: 'async',
+    })
   })
 })

@@ -1934,7 +1934,11 @@ export function runSpanSpecs(
       { class: INLINE_RULE_CLASS, ...(decls.length ? { style: decls.join(';') } : {}) },
     ])
   } else if (run.image) {
-    const attrs: Record<string, string> = { class: 'doc-inline-img' }
+    const attrs: Record<string, string> = {
+      class: 'doc-inline-img',
+      loading: 'lazy',
+      decoding: 'async',
+    }
     // a lazily served metafile is rasterized by the editor once it is mounted
     withMetafileSrc(attrs, run.image.dataUrl)
     const { widthPx, heightPx, rotDeg, flipH, flipV } = run.image

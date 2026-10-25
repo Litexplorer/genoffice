@@ -406,6 +406,7 @@ import {
 } from './file-actions'
 import { BlockIndex } from './pagination-index'
 import { isPhasedContentPending } from './phased-content'
+import { installPerfProbe } from './perf-probe'
 import {
   collectGapBands,
   compileGapBands,
@@ -5297,6 +5298,9 @@ export function App() {
     delSectBreaks,
     pendingWatermarkImage,
   ])
+
+  // opt-in runtime probe (window.__docsPerf): open phases, long tasks, fps
+  useEffect(() => installPerfProbe(), [])
 
   // Zoom repaints; it does not repaginate (the effect above measures the canvas
   // at zoom 1, so its result cannot change with the zoom). Only the

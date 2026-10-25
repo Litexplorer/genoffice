@@ -1405,6 +1405,8 @@ export const DocInlineImage = Node.create({
     // a metafile part is served lazily as bytes: the picture gets a source once
     // the renderer rasterizes it (metafile-images.ts), never as a pre-baked PNG
     withMetafileSrc(attrs, String(node.attrs.dataUrl))
+    attrs.loading = 'lazy'
+    attrs.decoding = 'async'
     const w = Number(node.attrs.widthPx)
     const h = Number(node.attrs.heightPx)
     const styles: string[] = []
@@ -5093,7 +5095,12 @@ function diagramSpecOf(diagram: DiagramDisplay): DomSpec {
           `top:${(s.fillRect.t * s.hPx).toFixed(1)}px;` +
           `width:${sw.toFixed(1)}px;height:${sh.toFixed(1)}px;max-width:none`
       }
-      const diagramImg: Record<string, string> = { class: 'doc-diagram-img', style: imgStyle }
+      const diagramImg: Record<string, string> = {
+        class: 'doc-diagram-img',
+        style: imgStyle,
+        loading: 'lazy',
+        decoding: 'async',
+      }
       withMetafileSrc(diagramImg, String(s.imageDataUrl))
       kids.push(['img', diagramImg])
     }
@@ -5961,7 +5968,12 @@ function protectedDomSpec(node: PmNode): DomSpec {
     let imgStyle = ''
     if (imageWidthPx) imgStyle += `width:${Number(imageWidthPx)}px;`
     if (imageHeightPx) imgStyle += `height:${Number(imageHeightPx)}px;`
-    const oleImg: Record<string, string> = { class: 'doc-ole-img', style: imgStyle }
+    const oleImg: Record<string, string> = {
+      class: 'doc-ole-img',
+      style: imgStyle,
+      loading: 'lazy',
+      decoding: 'async',
+    }
     withMetafileSrc(oleImg, String(imageDataUrl))
     return ['div', attrs, ['span', { class: 'doc-ole-wrap' }, ['img', oleImg]]]
   }

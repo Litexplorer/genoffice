@@ -57,6 +57,7 @@ import { hfSaveOptions } from './hf-sections'
 import { fetchDocBytes } from './doc-bytes'
 import { parseDocxOffThread } from './parse-off-thread'
 import { hasPendingMetafiles, whenMetafilesReady } from './editor/metafile-images'
+import { perfEnd, perfPhase, perfReset, perfStart } from './perf-probe'
 import { PHASED_APPEND } from './editor/streaming-tail-guard'
 import { docTextLength, docWeight, openTierFor } from './large-document'
 import { documentToMarkdown } from './export-markdown'
@@ -473,16 +474,23 @@ export async function loadFile(
     return 'password'
   }
   const generation = ++openGeneration
+  // a fresh open resets the probe so its phases describe this document only
+  perfReset()
+  const openAt = perfStart()
   try {
     const bytes = await fetchDocBytes(result.dataUrl)
+    perfEnd('open:bytes', openAt)
+    const parseAt = perfStart()
     // a 0-byte .docx (touch, failed download) is not a corrupt archive but an
     // empty document: open the blank template under the file's own path
     const parsed = await parseDocxOffThread(
       bytes.byteLength === 0 ? await blankDocxBytes() : bytes,
       { owned: true },
     )
+    perfEnd('open:parse', parseAt)
     if (generation !== openGeneration) return 'superseded'
     const tier = openTierFor(docWeight(parsed.blocks))
+    perfPhase('open:blocks', parsed.blocks.length)
     if (tier === 'refuse') {
       const msg = t('appDocTooLargeBlocks', {
         name: result.name,
@@ -499,8 +507,10 @@ export async function loadFile(
     const adopted = await adoptEmbeddedFonts(parsed.embeddedFonts)
     if (!adopted || generation !== openGeneration) return 'superseded'
     setDocFontTable(parsed.fontTable)
+    const fontsAt = perfStart()
     await prefetchFaces(collectDocFonts(parsed))
     await loadBundledStandIns(collectDocFonts(parsed))
+    perfEnd('open:fonts', fontsAt)
     if (generation !== openGeneration) return 'superseded'
     ctx.editor.storage.listNumbering.styles = parsed.styles
     ctx.editor.storage.listNumbering.docDefaults = parsed.docDefaults
@@ -508,10 +518,13 @@ export async function loadFile(
     applyDocLayoutSettings(ctx.editor, parsed)
     // the block model goes over as convertible ranges: building every node up
     // front blocked the first paint for as long as a 30k-block document takes
+    const mountAt = perfStart()
     setContentPhased(
       phasedHostFor(ctx),
       blocksToPmSource(parsed.blocks, readSections(parsed), pmDocOptions(parsed)),
     )
+    perfEnd('open:firstMount', mountAt)
+    perfEnd('open:toFirstContent', openAt)
     resetEditorHistory(ctx.editor)
     if (tier !== 'readOnly') focusDocumentStart(ctx.editor)
     noteDocumentSwapped()
@@ -1342,6 +1355,8 @@ async function printGroupsMerged(
   links: PdfInternalLink[],
 ): Promise<boolean> {
   const parts: string[] = []
+  // the preview's pictures must be decoded before the sheet is captured
+  forceEagerImages(document)
   // every printToPDF flips the whole document between print and screen media;
   // pv-exporting parks the covered editor's subtree layout for the export's
   // duration so each flip only relays out the group's own pages (hundreds of
@@ -1407,6 +1422,16 @@ function deferExportToPreview(ctx: FileActionContext, outPath?: string): Promise
 // in the meantime, and the resume call claims (clears) it before re-entering.
 let printJobActive = false
 
+/**
+ * A print/PDF capture only paints what the page actually loaded: lazy pictures
+ * must be eager before Chromium rasterizes the sheets, or they stay blank.
+ */
+function forceEagerImages(root: ParentNode): void {
+  for (const img of root.querySelectorAll<HTMLImageElement>('img[loading="lazy"]')) {
+    img.loading = 'eager'
+  }
+}
+
 /** Resolves true only when a PDF was written to disk. */
 export async function exportPdf(ctx: FileActionContext, outPath?: string): Promise<boolean> {
   const { doc } = ctx
@@ -1414,6 +1439,7 @@ export async function exportPdf(ctx: FileActionContext, outPath?: string): Promi
   await waitForFullContent()
   // lazily served metafiles must be rasterized before the pages are captured
   await whenMetafilesReady()
+  forceEagerImages(document)
   if (printJobActive || ctx.pendingMixedExportRef.current) {
     ctx.setStatus(t('appExportingPdf'))
     return false
@@ -1510,6 +1536,7 @@ export async function exportImages(ctx: FileActionContext): Promise<boolean> {
   const target = await window.desktop.pickExportImagesTarget()
   if (!target) return false
   await whenMetafilesReady()
+  forceEagerImages(document)
   ctx.setStatus(t('appExportingImages'))
   const fail = (error: string) => {
     ctx.setStatus(t('appExportImagesFailed', { error }))
@@ -1588,6 +1615,7 @@ export async function exportHtml(ctx: FileActionContext, outPath?: string): Prom
   if (!doc || !editor) return false
   await waitForFullContent()
   await whenMetafilesReady()
+  forceEagerImages(document)
   ctx.setStatus(t('appExportingHtml'))
   const root = editor.view.dom as HTMLElement
   const textWidthPx = Number.parseFloat(
@@ -1615,6 +1643,7 @@ export async function exportMarkdown(ctx: FileActionContext, outPath?: string): 
   if (!doc || !editor) return false
   await waitForFullContent()
   await whenMetafilesReady()
+  forceEagerImages(document)
   ctx.setStatus(t('appExportingMarkdown'))
   const { markdown, images } = documentToMarkdown(editor)
   const result = await window.desktop.exportMarkdown(doc.fileName, markdown, images, outPath)
