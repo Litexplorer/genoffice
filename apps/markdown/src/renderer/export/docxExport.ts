@@ -66,6 +66,10 @@ function runsFromInline(content: JSONContent[] | undefined): Run[] {
       runs.push(altTextRun(child))
       continue
     }
+    if (child.type === 'footnoteReference') {
+      runs.push({ text: `[^${String(child.attrs?.label ?? '')}]` })
+      continue
+    }
     if (child.type !== 'text' || !child.text) continue
     const run: Run = { text: child.text }
     for (const mark of child.marks ?? []) {
@@ -293,6 +297,24 @@ function walkBlock(ctx: WalkContext, node: JSONContent, base?: ParaFormat): void
       }
       break
     }
+    case 'footnoteDefinition': {
+      // docx has its own footnote model; until it is mapped, the note stays a
+      // visible paragraph in the label's own `[^label]: ` form
+      const label = String(node.attrs?.label ?? '')
+      const runs: Run[] = [{ text: `[^${label}]: ` }]
+      let first = true
+      for (const child of node.content ?? []) {
+        if (!first) runs.push({ text: ' ' })
+        first = false
+        runs.push(...runsFromInline(child.content))
+      }
+      pushParagraph(ctx, {
+        type: 'paragraph',
+        runs,
+        format: mergeFormat(base, { indentLeft: INDENT_STEP }),
+      })
+      break
+    }
     default: {
       // unknown block: keep its text so nothing silently disappears
       const text = plainText(node)
@@ -345,8 +367,9 @@ export async function exportDocxBytes(
   doc: JSONContent,
   loadImage: ImageLoader,
   renderDiagram?: DiagramRenderer,
+  blankOptions?: { omitGeneratorFields?: boolean },
 ): Promise<Uint8Array> {
   const mapping = await mapDocToSaveBlocks(doc, loadImage, renderDiagram)
-  const parsed = await parseDocx(await buildBlankDocx())
+  const parsed = await parseDocx(await buildBlankDocx(blankOptions))
   return saveDocx(parsed, mapping.blocks, mapping.options)
 }

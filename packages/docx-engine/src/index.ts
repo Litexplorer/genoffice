@@ -11,6 +11,15 @@ export {
 export { decodeEntities } from './parse-xml-text'
 export { sdtCheckboxGlyphs, sdtCheckboxIsChecked } from './checkbox-control'
 export {
+  buildContentControlXml,
+  isContentControlLock,
+  nextContentControlId,
+  CONTENT_CONTROL_LOCKS,
+  type ContentControlLock,
+  type ContentControlShell,
+  type ContentControlSpec,
+} from './content-control'
+export {
   parseDocx,
   reconcileGridColumns,
   paraCsFormat,
@@ -25,9 +34,11 @@ export {
   ifBranch,
   mergeBlockTree,
   mergeDataFromRows,
+  mergeFieldInstruction,
   mergeFieldName,
   mergeFieldSwitches,
   mergeFieldText,
+  mergeOutputFileName,
   mergeRecords,
   placeholderText,
   splitInstruction,
@@ -42,34 +53,54 @@ export { assertZipInflatesWithinLimits, assertZipWithinLimits, DOCX_ZIP_LIMITS }
 export { LAZY_MEDIA_SCHEME, isLazyMediaPart, lazyMediaUrl, parseLazyMediaUrl } from './lazy-media'
 export { setAltChunkHtmlConverter, type AltChunkHtmlConverter } from './alt-chunk'
 export { tocLevelOf } from './parse-fields'
-export { mergeStyleBorders } from './parse-props'
+export { EMPTY_EA_THEME_FONT, mergeStyleBorders, themeLangEaSlotFont } from './parse-props'
 export {
   APP_PROPERTIES_PATH,
   APP_PROPERTY_KEYS,
   CORE_PROPERTIES_PATH,
   CORE_PROPERTY_KEYS,
+  NEW_DOCUMENT_APPLICATION,
+  NEW_DOCUMENT_APP_VERSION,
+  NEW_DOCUMENT_TEMPLATE,
   applyPropertyChanges,
   emptyDocumentProperties,
+  newDocumentAppPropertiesXml,
+  newDocumentCorePropertiesXml,
   parseAppPropertiesXml,
   parseCorePropertiesXml,
   parseCustomPropertiesXml,
+  parseCustomPropertyTypesXml,
   parsePropertyChanges,
   patchAppPropertiesXml,
   patchCorePropertiesXml,
   patchCustomPropertiesXml,
   readDocumentProperties,
+  w3cdtfStamp,
   type DocumentProperties,
   type PropertyChanges,
+  type PropertyValue,
 } from './doc-properties'
 export {
   saveDocx,
   findChartWorkbookPath,
+  missingHeadingLevels,
   readDocxPartBase64,
   type SaveBlock,
   type SaveOptions,
   type StyleUpsert,
   type ParsedDocFull,
 } from './patch'
+export {
+  REMOVE_PARTS_KINDS,
+  applyRemoveParts,
+  planRemoveParts,
+  removePartsRefusalMessage,
+  removePartsRefusalMessageFor,
+  type RemovePartsKind,
+  type RemovePartsOptions,
+  type RemovePartsPlan,
+  type RemovedPartBinding,
+} from './remove-parts'
 export {
   TABLE_HEADER_FILL,
   applyImageWrap,
@@ -86,13 +117,17 @@ export {
   generateCaptionXml,
   generateIndexFieldXml,
   generateParagraphXml,
+  mergeRPrModel,
   generateTableModelXml,
   generateTableXml,
   generateTocFieldXml,
   mergePPrFormat,
   setPPrChange,
   stripPPrChange,
+  paraMarkRevisionXml,
+  setParaMarkRevision,
   stripParaMarkRevision,
+  resolveParaMarkRPrChange,
   paraMarkColor,
   stripParaMarkColor,
   patchFieldParagraphXml,
@@ -142,6 +177,7 @@ export {
   ommlToLatex,
   ommlToMathML,
 } from './math'
+export { patchHfPicturesXml, patchRunPictureXml, type RunPictureGeometry } from './run-picture'
 export { scanBody, type BodyElement, type BodyScan } from './scan'
 export {
   BLANK_BULLET_NUM_ID,
@@ -168,6 +204,8 @@ export {
   readSections,
   readSectionSettings,
   sectionSettingsFromXml,
+  pageBordersXml,
+  LINE_BORDER_VALS,
   notePropsFromXml,
   xmlFlagOn,
 } from './section'
@@ -175,6 +213,8 @@ export { nextNoteId, parseNotesXml, type NoteKind } from './notes'
 export {
   isPictureWatermark,
   pictureWatermarkPreviewImage,
+  textWatermarkPreviewImage,
+  textWatermarkBoxPt,
   readPictureWatermark,
   readWatermarkText,
   type PictureWatermarkInfo,
@@ -183,6 +223,7 @@ export {
   type WatermarkSpec,
 } from './watermark'
 export {
+  builtInHeadingStyleUpsert,
   mergeStyleXml,
   mergeDefaultFontsXml,
   type DefaultFonts,
@@ -233,8 +274,14 @@ export {
 
 export { previewFontSettings } from './font-settings'
 export {
+  applyRevisionResolutions,
   applyTrackedChangesXml,
+  cleanMoveRangeMarkers,
   countTrackedChangesXml,
+  readPropChangeXml,
+  resolvePropChangeXml,
+  type PropChangeRecord,
+  type RevisionResolution,
   type RevisionXmlFilter,
   type RevisionXmlMode,
   type RevisionXmlResult,
@@ -254,3 +301,26 @@ export {
   type ResolveDiff,
   type TableCond,
 } from './resolve-props'
+export {
+  compareBlocks,
+  compareDocuments,
+  DEFAULT_COMPARE_AUTHOR,
+  type CompareGranularity,
+  type CompareIgnore,
+  type CompareOptions,
+  type CompareResult,
+  type CompareSummary,
+} from './compare'
+export { keepsHangulKanaSingle } from './parse-block-passes'
+export {
+  charClass,
+  isCjkLetterChar,
+  isDoubleByteChar,
+  isEastAsianChar,
+  isEastAsianLangTag,
+  isHangulChar,
+  isLatinAlnumChar,
+  textHasEastAsian,
+  textHasHangulChars,
+  type CharClass,
+} from './char-class'

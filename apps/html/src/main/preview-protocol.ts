@@ -1,5 +1,6 @@
 import {
   DOCX_MEDIA_SCHEME_PRIVILEGE,
+  SLIDE_MEDIA_SCHEME_PRIVILEGE,
   RENDERER_SCHEME_PRIVILEGE,
   registerPrivilegedSchemesOnce,
 } from '@genoffice/electron-utils'
@@ -20,6 +21,7 @@ export function registerPrivilegedSchemes(extraSchemes: CustomScheme[] = []): vo
   registerPrivilegedSchemesOnce([
     RENDERER_SCHEME_PRIVILEGE,
     DOCX_MEDIA_SCHEME_PRIVILEGE,
+    SLIDE_MEDIA_SCHEME_PRIVILEGE,
     {
       scheme: PREVIEW_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },

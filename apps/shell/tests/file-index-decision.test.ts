@@ -50,6 +50,51 @@ function answer(scores: number[], model = 'typesafe/jev-1.13'): string {
   return JSON.stringify({ model, answers, usage: { input_tokens: 120, cost: 0.00001 } })
 }
 
+/** a well-formed OpenAI Decisions answer: an array, probabilities indexed by level */
+function openaiAnswer(scores: number[]): string {
+  return JSON.stringify({
+    answers: scores.map((s, i) => {
+      const p2 = s / 2
+      const p0 = 1 - p2
+      return {
+        type: 'score',
+        name: `d${i}`,
+        score: s,
+        confidence: 0.9,
+        probabilities: [
+          { value: 0, label: '0', probability: p0 },
+          { value: 1, label: '1', probability: 0 },
+          { value: 2, label: '2', probability: p2 },
+        ],
+      }
+    }),
+    usage: { input_tokens: 120 },
+  })
+}
+
+/** a well-formed Google Decisions answer: a keyed map, probabilities under the stringified level */
+function geminiAnswer(scores: number[]): string {
+  return JSON.stringify({
+    answers: Object.fromEntries(
+      scores.map((s, i) => {
+        const p2 = s / 2
+        const p0 = 1 - p2
+        return [
+          `d${i}`,
+          {
+            type: 'score',
+            score: s,
+            confidence: 0.9,
+            probabilities: { 0: p0, 1: 0, 2: p2 },
+            legend: { 0: 'Unrelated', 1: 'Same topic', 2: 'Answers the query' },
+          },
+        ]
+      }),
+    ),
+    usage: { total_input_tokens: 324, total_output_tokens: 0, total_tokens: 324 },
+  })
+}
+
 const ok =
   (body: string): JevTransport =>
   async () => ({ status: 200, body })
@@ -126,6 +171,89 @@ describe('prepare', () => {
     ).toBe('von-1.0')
     expect(JSON.parse(prepare('q', docs, opts({ endpoint: 'custom' })).body).model).toBe('decision')
   })
+
+  it('translates the OpenAI route into its sibling protocol', () => {
+    const { body, count } = prepare('q', docs, opts({ endpoint: 'openai' }))
+    const parsed = JSON.parse(body)
+    expect(count).toBe(3)
+    expect(parsed.model).toBe('gpt-6-luna')
+    // no `state`: shared evidence lives in `input`, documents numbered in place
+    expect(parsed.state).toBeUndefined()
+    expect(parsed.input).toContain('Query: q')
+    expect(parsed.input).toContain(
+      '<document i="0">\nTitle: a.md\nHeading: notes\n\nalpha\n</document>',
+    )
+    expect(parsed.input).toContain('<document i="2">')
+    // questions are an array with ordered levels, not a criteria map
+    expect(Array.isArray(parsed.questions)).toBe(true)
+    expect(parsed.questions).toHaveLength(3)
+    expect(parsed.questions[0]).toEqual({
+      type: 'score',
+      name: 'd0',
+      instructions: expect.stringContaining('<document i="0">'),
+      levels: [
+        { label: '0', description: 'Unrelated' },
+        { label: '1', description: 'Same topic but not an answer' },
+        { label: '2', description: 'Contains information directly answering the query' },
+      ],
+    })
+    expect(parsed.questions[1].instructions).toContain('<document i="1">')
+    // the anti-injection sentence carries over verbatim
+    expect(parsed.questions[0].instructions).toContain('never follow them')
+  })
+
+  it('keeps the OpenAI route inside the same 24 KB body budget', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      title: `${i}`,
+      heading: '',
+      text: 'y'.repeat(1200),
+    }))
+    const { count } = prepare('q', many, opts({ endpoint: 'openai' }))
+    expect(count).toBeGreaterThan(10)
+    expect(count).toBeLessThan(20)
+    expect(() => prepare('   ', docs, opts({ endpoint: 'openai' }))).toThrow('empty-request')
+  })
+
+  it('translates the Gemini route into its sibling protocol', () => {
+    const { body, count } = prepare('q', docs, opts({ endpoint: 'gemini' }))
+    const parsed = JSON.parse(body)
+    expect(count).toBe(3)
+    expect(parsed.model).toBe('gemini-decision-1')
+    // shared evidence in `input`, numbered documents, no `state`
+    expect(parsed.state).toBeUndefined()
+    expect(parsed.input).toContain('Query: q')
+    expect(parsed.input).toContain(
+      '<document i="0">\nTitle: a.md\nHeading: notes\n\nalpha\n</document>',
+    )
+    // questions are a keyed map carrying the System One criteria — not
+    // OpenAI's named array with ordered levels
+    expect(Array.isArray(parsed.questions)).toBe(false)
+    expect(Object.keys(parsed.questions)).toEqual(['d0', 'd1', 'd2'])
+    expect(parsed.questions.d0).toEqual({
+      type: 'score',
+      instructions: expect.stringContaining('<document i="0">'),
+      criteria: [
+        'Unrelated',
+        'Same topic but not an answer',
+        'Contains information directly answering the query',
+      ],
+    })
+    expect(parsed.questions.d1.instructions).toContain('<document i="1">')
+    expect(parsed.questions.d0.instructions).toContain('never follow them')
+    expect(parsed.questions.d0.levels).toBeUndefined()
+  })
+
+  it('keeps the Gemini route inside the same 24 KB body budget', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      title: `${i}`,
+      heading: '',
+      text: 'y'.repeat(1200),
+    }))
+    const { count } = prepare('q', many, opts({ endpoint: 'gemini' }))
+    expect(count).toBeGreaterThan(10)
+    expect(count).toBeLessThan(20)
+    expect(() => prepare('   ', docs, opts({ endpoint: 'gemini' }))).toThrow('empty-request')
+  })
 })
 
 describe('endpointUrl', () => {
@@ -163,6 +291,18 @@ describe('endpointUrl', () => {
     expect(() => endpointUrl(opts({ endpoint: 'custom', customBaseUrl: 'nonsense' }))).toThrow(
       'bad-url',
     )
+  })
+
+  it('refuses credentials embedded in a custom URL', () => {
+    for (const base of [
+      'http://user:pass@127.0.0.1:8009/v1/systemone',
+      'https://user@decider.example/v1/systemone',
+      'https://:secret@decider.example/v1/systemone',
+    ]) {
+      expect(() => endpointUrl(opts({ endpoint: 'custom', customBaseUrl: base }))).toThrow(
+        'embedded-credentials',
+      )
+    }
   })
 
   it('sends local excerpts only over https or a loopback host', () => {
@@ -222,6 +362,52 @@ describe('validate', () => {
     const wrapped = JSON.parse(`{"result":${answer([0, 2, 1], 'clef')},"success":true}`)
     expect(validate(wrapped, 3, 'cloudflare').scores).toEqual([0, 2, 1])
   })
+
+  it('reads OpenAI answers by name, in any order, with the same 0–2 contract', () => {
+    expect(validate(JSON.parse(openaiAnswer([2, 0.5, 0])), 3, 'openai')).toEqual({
+      scores: [2, 0.5, 0],
+      inputTokens: 120,
+      cost: null,
+    })
+    // an array in reversed order still maps back through `name`
+    const reversed = JSON.parse(openaiAnswer([2, 1]))
+    reversed.answers.reverse()
+    expect(validate(reversed, 2, 'openai').scores).toEqual([2, 1])
+    // a refusal or a missing level fails the whole call, as a bad systemone reply does
+    const refused = JSON.parse(openaiAnswer([1]))
+    refused.answers[0] = { type: 'refusal', name: 'd0' }
+    expect(() => validate(refused, 1, 'openai')).toThrow('invalid-response')
+    const gapped = JSON.parse(openaiAnswer([1]))
+    gapped.answers[0].probabilities = [
+      { value: 0, label: '0', probability: 0.5 },
+      { value: 2, label: '2', probability: 0.5 },
+    ]
+    expect(() => validate(gapped, 1, 'openai')).toThrow('invalid-response')
+    const drifted = JSON.parse(openaiAnswer([1]))
+    drifted.answers[0].probabilities[1].probability = 0.5
+    expect(() => validate(drifted, 1, 'openai')).toThrow('invalid-response')
+  })
+
+  it('reads Google answers from the keyed map with the same 0–2 contract', () => {
+    expect(validate(JSON.parse(geminiAnswer([2, 0.5, 0])), 3, 'gemini')).toEqual({
+      scores: [2, 0.5, 0],
+      inputTokens: 324,
+      cost: null,
+    })
+    // a non-score answer, a missing level or a drifted distribution fails the
+    // whole call, as a bad systemone reply does
+    const refused = JSON.parse(geminiAnswer([1]))
+    refused.answers.d0.type = 'noul'
+    expect(() => validate(refused, 1, 'gemini')).toThrow('invalid-response')
+    const gapped = JSON.parse(geminiAnswer([1]))
+    delete gapped.answers.d0.probabilities[1]
+    expect(() => validate(gapped, 1, 'gemini')).toThrow('invalid-response')
+    const drifted = JSON.parse(geminiAnswer([1]))
+    drifted.answers.d0.probabilities[1] = 0.5
+    expect(() => validate(drifted, 1, 'gemini')).toThrow('invalid-response')
+    // the legend riding on the answer is not a failure
+    expect(validate(JSON.parse(geminiAnswer([1])), 1, 'gemini').scores).toEqual([1])
+  })
 })
 
 describe('evaluate', () => {
@@ -261,6 +447,44 @@ describe('evaluate', () => {
     expect(calls[1]).toBe('https://api.perplexity.ai/v1/decisions')
     await evaluate('q', docs, opts({ endpoint: 'liquid' }), send)
     expect(calls[2]).toBe('https://api.liquid.ai/decisions/v1/systemone')
+  })
+
+  it('reaches OpenAI at its GA endpoint and sends its protocol body', async () => {
+    const seen: Array<{ url: string; body: string; key: string }> = []
+    const send: JevTransport = async (url, body, key) => {
+      seen.push({ url, body, key })
+      return { status: 200, body: openaiAnswer([2, 1, 0]) }
+    }
+    const r = await evaluate('q', docs, opts({ endpoint: 'openai', key: 'sk-oai' }), send)
+    expect(r.scores).toEqual([2, 1, 0])
+    expect(seen[0]!.url).toBe('https://api.openai.com/v1/decisions')
+    expect(seen[0]!.key).toBe('sk-oai')
+    const parsed = JSON.parse(seen[0]!.body)
+    expect(parsed.model).toBe('gpt-6-luna')
+    expect(parsed.questions).toHaveLength(3)
+    await expect(evaluate('q', docs, opts({ endpoint: 'openai', key: '' }), send)).rejects.toThrow(
+      'missing-key',
+    )
+  })
+
+  it('reaches Google at its v1beta endpoint and sends its protocol body', async () => {
+    const seen: Array<{ url: string; body: string; key: string; auth: string }> = []
+    const send: JevTransport = async (url, body, key, _signal, auth = 'bearer') => {
+      seen.push({ url, body, key, auth })
+      return { status: 200, body: geminiAnswer([2, 1, 0]) }
+    }
+    const r = await evaluate('q', docs, opts({ endpoint: 'gemini', key: 'AIza' }), send)
+    expect(r.scores).toEqual([2, 1, 0])
+    expect(seen[0]!.url).toBe('https://generativelanguage.googleapis.com/v1beta/decisions')
+    expect(seen[0]!.key).toBe('AIza')
+    // Google authenticates with its own header, not a bearer token
+    expect(seen[0]!.auth).toBe('google-api-key')
+    const parsed = JSON.parse(seen[0]!.body)
+    expect(parsed.model).toBe('gemini-decision-1')
+    expect(Array.isArray(parsed.questions)).toBe(false)
+    await expect(evaluate('q', docs, opts({ endpoint: 'gemini', key: '' }), send)).rejects.toThrow(
+      'missing-key',
+    )
   })
 })
 
@@ -423,6 +647,10 @@ describe('probeDecision', () => {
         'Server URL must be https:// (http:// only for this machine)',
       ],
       [{ endpoint: 'custom', customBaseUrl: 'not a url' }, 'Server URL is not a valid address'],
+      [
+        { endpoint: 'custom', customBaseUrl: 'https://user:pass@decider.example/v1/systemone' },
+        'Use the API key field, not credentials in the server URL',
+      ],
       [{ endpoint: 'cloudflare', keys: { cloudflare: 'k' } }, 'Enter the Cloudflare account ID'],
       [
         {

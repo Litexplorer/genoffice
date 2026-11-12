@@ -1408,6 +1408,18 @@ export function IconOutlineView(props: IconProps) {
   )
 }
 
+export function IconStoryView(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="3.76" width="10.01" height="8.47" rx="0.62" />
+      <path d="M 6.46 3.76 v 8.47" strokeWidth="1" />
+      <path d="M 8 5.69 h 3.85 M 8 7.62 h 3.85 M 8 9.54 h 2.31" strokeWidth="1" />
+      {/* the '#' mark in the margin */}
+      <path d="M 4.3 5.2 v 1.3 M 5.5 5.2 v 1.3 M 4.05 5.85 h 1.7" strokeWidth="1" />
+    </Svg>
+  )
+}
+
 export function IconRuler(props: IconProps) {
   return (
     <Svg {...props}>
@@ -1723,6 +1735,25 @@ export function IconHighlighterPen(props: IconProps) {
   )
 }
 
+export function IconPencilInk(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4.2 11.8 3 13l1.2-3.3L10.5 3.4a1.3 1.3 0 0 1 1.9 0l.2.2a1.3 1.3 0 0 1 0 1.9L6.3 11.8H4.2Z" />
+      <path d="M4.2 9.7h2.1v2.1" />
+      <path d="M9.4 4.5 11.5 6.6" />
+      <path d="M3.2 14.2h3" strokeDasharray="0.8 1" />
+    </Svg>
+  )
+}
+
+export function IconPlus(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 3v10M3 8h10" />
+    </Svg>
+  )
+}
+
 export function IconEraser(props: IconProps) {
   return (
     <Svg {...props}>
@@ -1864,6 +1895,16 @@ export function IconCheckboxChecked(props: IconProps) {
 }
 
 /** Word's Styles Pane glyph: a pane with an "A" beside a list */
+/** Word's Styles button: a tall A with a brush laid across its lower right */
+export function IconStyles(props: IconProps) {
+  return (
+    <Svg {...props} paint={1.3}>
+      <path d="M 1.6 13.4 5.6 2.6 l 4 10.8 M 3 9.6 h 5.2" />
+      <path d="M 9.6 12.2 l 4.3 -4.3 1.3 1.3 -4.3 4.3 q -1 0.9 -2.3 0.5 q 0.3 -1.1 1 -1.8 z" />
+    </Svg>
+  )
+}
+
 export function IconStylesPane(props: IconProps) {
   return (
     <Svg {...props}>
@@ -1931,6 +1972,44 @@ export function IconConvert(props: IconProps) {
       <path d="M12.4 2.8v2.6H9.8" />
       <path d="M12.5 9.5a5 5 0 0 1-8.8 1.4" />
       <path d="M3.6 13.2v-2.6h2.6" />
+    </Svg>
+  )
+}
+
+/** the Mailings tab: a letter */
+export function IconMail(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="3.5" width="11" height="9" rx="1" />
+      <path d="M 2.9 4.4 8 8.4 13.1 4.4" />
+    </Svg>
+  )
+}
+
+/** the merge field of a mail merge template: the guillemets Word writes */
+export function IconMergeField(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M 6.4 4.2 3.6 8l2.8 3.8" />
+      <path d="M 11.2 4.2 14 8l-2.8 3.8" />
+    </Svg>
+  )
+}
+
+/** the previous record of a mail merge */
+export function IconChevronLeft(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M 10 3.5 5.5 8l4.5 4.5" />
+    </Svg>
+  )
+}
+
+/** the next record of a mail merge */
+export function IconChevronRight(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M 6 3.5 10.5 8 6 12.5" />
     </Svg>
   )
 }

@@ -44,6 +44,7 @@ export default defineConfig({
           '@genoffice/agent-core',
           '@genoffice/electron-utils',
           '@genoffice/font-metrics',
+          '@genoffice/xlsx-gateway',
         ],
       }),
     ],

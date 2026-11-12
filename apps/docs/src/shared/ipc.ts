@@ -33,6 +33,54 @@ export interface PickImageResult {
   name: string
 }
 
+// ---- mail merge (genoffice#2097) ----
+
+/** a recipient list read from a local .xlsx or .csv */
+export interface MergeDataSource {
+  /** absolute path of the file the records came from */
+  path: string
+  /** the file's name, for the UI */
+  name: string
+  /** the column names, in file order */
+  fields: string[]
+  /** one entry per record */
+  records: Record<string, string>[]
+}
+
+/** the answer to a data-source pick: null when the user canceled the dialog */
+export type MergeDataSourceResponse =
+  { ok: true; source: MergeDataSource } | { ok: false; error: string } | null
+
+/** one merged document, ready to be written */
+export interface MergeOutputFile {
+  /** the file name, without a folder */
+  name: string
+  /** the .docx bytes */
+  data: ArrayBuffer
+}
+
+/** where the merged documents go: one file for all records, one per record, a
+ * label sheet, or one envelope per record */
+export type MergeOutputMode = 'single' | 'perRecord' | 'labels' | 'envelopes'
+
+export interface MergeOutputRequest {
+  mode: MergeOutputMode
+  files: MergeOutputFile[]
+}
+
+export interface MergeOutputResponse {
+  ok: boolean
+  /** the file that was written (single mode) */
+  path?: string
+  /** the folder the files went into (per-record mode) */
+  folder?: string
+  /** how many documents were written */
+  count?: number
+  /** the user closed the dialog without choosing */
+  canceled?: boolean
+  error?: string
+}
+
 // ---- AI provider settings/config/streaming: canonical types live in @genoffice/ai-provider ----
 
 import type {
@@ -158,6 +206,7 @@ export type MenuCommand =
   | 'open-path'
   | 'save'
   | 'save-as'
+  | 'name-with-ai'
   | 'undo'
   | 'redo'
   | 'zoom-in'
@@ -289,12 +338,17 @@ export interface ZoteroRendererResponse {
 /**
  * MCP bridge: an editor command pushed from the shell main process into a docs
  * tab so an external agent drives the *visible* editor instead of writing a file
- * behind it. `insert_content` / `replace_blocks` / `apply_ops` / `read_document`
- * reuse the built-in agent's tool executors; `save_document` writes the live
- * document to an explicit path.
+ * behind it. `insert_content` / `replace_blocks` / `apply_ops` / `insert_picture` /
+ * `read_document` reuse the built-in agent's tool executors; `save_document` writes
+ * the live document to an explicit path.
  */
 export type McpEditorCommand =
-  'insert_content' | 'replace_blocks' | 'apply_ops' | 'read_document' | 'save_document'
+  | 'insert_content'
+  | 'replace_blocks'
+  | 'apply_ops'
+  | 'insert_picture'
+  | 'read_document'
+  | 'save_document'
 
 export interface McpCommandMessage {
   requestId: string
@@ -338,6 +392,14 @@ export interface PrintJobOptions {
   copies?: number
   collate?: boolean
   duplex?: PrintDuplex
+}
+
+/** the document's own paper size in twips, read off the pagination preview's
+ * first sheet: the CUPS print route bakes printToPDF pages at this size
+ * instead of Chromium's Letter default. Optional — absent falls back. */
+export interface PrintPaper {
+  widthTwips: number
+  heightTwips: number
 }
 
 export interface PrinterInfo {
@@ -490,8 +552,16 @@ export interface DesktopApi {
   signalMcpReady(): void
   getRecentFiles(): Promise<string[]>
   pickImage(): Promise<PickImageResult | null>
+  /** Mailings tab: pick a local .xlsx or .csv and read it as a recipient list */
+  pickMergeDataSource(): Promise<MergeDataSourceResponse>
+  /** Mailings tab: write the merged documents (one file, or one per record) */
+  writeMergeOutput(request: MergeOutputRequest): Promise<MergeOutputResponse>
   /** vertical metrics of an installed family (exact name match), null when missing */
   fontMetrics(family: string): Promise<FaceVerticalMetrics | null>
+  /** the other spellings of the installed faces behind these names: a localized
+   *  (CJK) family name yields the English spelling the browser resolves.
+   *  Only the names that have an alias are answered (genoffice#2449). */
+  fontAliases(names: readonly string[]): Promise<Record<string, readonly string[]>>
   getAiSettings(): Promise<AiSettings>
   setAiSettings(settings: AiSettings): Promise<void>
   /** ai-settings.json was rewritten by any renderer; re-read it */
@@ -503,8 +573,14 @@ export interface DesktopApi {
   /** print the current window; ok=false without error = canceled.
    *  scale: print scale inverting the preview's print zoom (print-zoom.ts).
    *  job: printer/copies/duplex from the in-app dialog; a named printer ('' = OS
-   *  default) prints silently, null or omitted opens the system dialog */
-  print(scale?: number, job?: PrintJobOptions): Promise<{ ok: boolean; error?: string }>
+   *  default) prints silently, null or omitted opens the system dialog.
+   *  paper: the document's own page size in twips (the preview's first sheet),
+   *  used by the CUPS print route to size printToPDF's pages */
+  print(
+    scale?: number,
+    job?: PrintJobOptions,
+    paper?: PrintPaper,
+  ): Promise<{ ok: boolean; error?: string }>
   /** installed printers for the in-app print dialog */
   listPrinters(): Promise<PrinterInfo[]>
   /** render the document to PDF and ask where to save; size in twips.

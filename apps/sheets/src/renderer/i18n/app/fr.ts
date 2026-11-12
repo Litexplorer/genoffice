@@ -1,6 +1,21 @@
 import type { zh } from './zh'
 
 export const fr = {
+  // ── Withholding cells from the model ──
+  redactMenuLabel: 'Masquer la sélection à l’IA',
+  redactDialogDesc:
+    'La sélection reste dans le document et dans le fichier ; le modèle ne voit que le marqueur ci-dessous. Donnez-lui un nom pour qu’il sache ce qu’il désigne.',
+  redactDialogScope:
+    'Le masquage ne concerne que l’IA de cette application. La CLI, les outils MCP et l’exportation sans interface lisent le fichier directement et voient toujours ces mots.',
+  redactDialogPlaceholder: 'Nom du placeholder, ex. : téléphone du client',
+  redactCancel: 'Annuler',
+  redactInsert: 'Masquer',
+  redactEnable: 'Clic droit sur une sélection pour la masquer au modèle.',
+  redactNeedsSavedRow:
+    "Cette ligne n'est pas encore dans le fichier. Enregistrez d'abord, puis masquez la cellule.",
+  redactRecoveredFromNames:
+    'Une autre application a réécrit ce fichier et effacé la trace de ce qui est masqué. Les cellules masquées ont été retrouvées dans les noms du classeur ; la sauvegarde restaure la trace complète.',
+
   appMergeWorkbooks: 'Fusionner des classeurs',
   appMergeWorkbooksTip: "Ajouter les feuilles d'autres fichiers Excel à ce classeur",
   appMergeWorkbooksPicking: 'Choisissez les fichiers à fusionner…',
@@ -107,9 +122,11 @@ export const fr = {
   appChartNoRepoint: 'Ce graphique ne permet pas de redéfinir ses plages de données.',
   appKeepOneSeries: 'Conservez au moins une série.',
   appNoCategoriesToSwitch: 'Aucune catégorie à permuter.',
-  appComboNoSelectData:
-    "La modification de la source de données d'un graphique combiné n'est pas encore prise en charge.",
+  appSelectDataUnsupported:
+    "La modification de la source de données de ce type de graphique n'est pas prise en charge.",
   appSeriesName: 'Nom de la série',
+  appSeriesType: 'Type de série',
+  appSecondaryAxis: 'Axe secondaire',
   appValuesRange: 'Plage de valeurs',
   appCategoriesRange: 'Plage de catégories',
   appKeepUnchanged: 'Conserver tel quel',
@@ -198,6 +215,13 @@ export const fr = {
   appInvalidPageField: 'Champ de filtre du rapport non valide.',
   appPivotPageItemMissing:
     "L'élément de filtre « {item} » n'est pas un membre du champ « {label} ».",
+  appInvalidPivotBaseField:
+    'Le champ de base de « Afficher les valeurs en » doit se trouver en lignes ou en colonnes.',
+  appPivotBaseFieldMissing:
+    "Le mode « Afficher les valeurs en » d'un champ de valeurs nécessite un champ de base.",
+  appPivotBaseFieldNotAxis:
+    'Le champ de base « {label} » doit se trouver dans les lignes ou les colonnes du tableau croisé.',
+  appPivotBaseItemMissing: "L'élément de base « {item} » n'est pas un membre du champ « {label} ».",
   appInvalidLabelFilterField: "Le champ du filtre d'étiquettes n'est pas valide.",
   appInvalidValueFieldIndex: "L'index de champ de valeurs {index} n'est pas valide.",
   appInvalidValueField: 'Champ de valeurs non valide.',
@@ -352,8 +376,8 @@ export const fr = {
     "Cette feuille contient un tableau croisé dynamique — le déplacement de plages n'est pas encore pris en charge.",
   appMergeOverTable:
     'La sélection chevauche un tableau Excel — la fusion de cellules dans un tableau n’est pas encore prise en charge.',
-  appTableFilterNoEdit:
-    'Le filtre de cette feuille appartient à un tableau Excel — sa modification ne peut pas encore être enregistrée.',
+  appFilterToggleFailed:
+    'Le filtre n’a pas été appliqué — sélectionnez d’abord la plage qui contient vos données.',
   appAutofillStreaming:
     "La recopie automatique vers une zone encore en cours de chargement en flux n'est pas encore autorisée.",
   appDvNeedsIndexed:
@@ -407,6 +431,9 @@ export const fr = {
   appTableNameUsed: 'Le nom de tableau « {name} » a déjà été utilisé pendant cette session.',
   appTableNameInFile: 'Le nom de tableau "{name}" est déjà utilisé par un tableau du fichier.',
   appTableOverlapsSession: 'La plage chevauche le tableau « {name} » créé pendant cette session.',
+  appTableOverlapsFile: 'La plage chevauche le tableau « {name} » du fichier.',
+  appTableAlreadyInTable:
+    'La sélection se trouve déjà dans le tableau « {name} » — modifiez le style depuis Création de tableau.',
   appTablesNeedFile: "Ouvrez d'abord un fichier XLSX — les tableaux sont écrits dans le fichier.",
   appTableSelectRange:
     "Sélectionnez d'abord la plage de données — les en-têtes dans sa première ligne.",
@@ -501,6 +528,7 @@ export const fr = {
   appGridlinesHidden: 'Quadrillage masqué.',
   appGridlinesShown: 'Quadrillage affiché.',
   appShowingFormulas: 'Affichage des formules — basculez à nouveau pour les valeurs.',
+  appShowingFormulasActive: 'Formules affichées',
   appShowingValues: 'Affichage des valeurs calculées.',
   appTraceNoFormula: "Repérer les antécédents : la cellule active n'a pas de formule.",
   appTraceNoRefs: "Repérer les antécédents : cette formule n'a aucune référence de cellule.",
@@ -551,6 +579,7 @@ export const fr = {
   appBridgeUnavailable:
     "Le pont de fichiers du bureau est indisponible. Redémarrez l'application Electron.",
   appOpenCanceled: 'Sélection du classeur annulée.',
+  appImportCanceled: 'Import annulé.',
   appOpeningWorkbook: 'Ouverture du classeur…',
   appOpened: '{name} ouvert — les modifications de cellules se réenregistrent avec ⌘S.',
   appOpenFailed: "Impossible d'ouvrir le classeur.",
@@ -618,8 +647,6 @@ export const fr = {
   appSaveFailed: "Impossible d'enregistrer le classeur.",
   appCfRuleUnsaveable:
     'Cette règle de mise en forme conditionnelle ne peut pas être enregistrée en xlsx — utilisez un autre type de règle.',
-  appSaveErrX14Dv:
-    "Cette feuille comporte une validation des données étendue (x14) ; la modification de ses règles de validation n'est pas encore prise en charge.",
   appSaveErrMultiSelectList:
     "La validation par liste à sélection multiple ne peut pas être enregistrée en xlsx — supprimez la règle avant d'enregistrer.",
   appSaveErrX14Cf:
@@ -753,6 +780,7 @@ export const fr = {
   appExportPdfTitle: 'Exporter en PDF',
   appSaveTitle: 'Enregistrer (⌘S)',
   appSaveAs: 'Enregistrer sous',
+  aiNameFile: "Nommer avec l'IA…",
   appUndo: 'Annuler',
   appRedo: 'Rétablir',
   appUnsavedEditOne: '● {count} modification non enregistrée',
@@ -784,7 +812,6 @@ export const fr = {
   appLinkPlaceholder: 'https://example.com ou Sheet1!A1',
   appRemoveLink: 'Supprimer le lien',
   appNotAvailableYet: 'Pas encore disponible',
-  appComingSoon: 'Bientôt disponible',
   appGroupChartLayouts: 'Dispositions du graphique',
   appAddChartElement: 'Ajouter un élément de graphique',
   appAddChartElementTitle: 'Titres, étiquettes de données, légende',
@@ -1201,6 +1228,20 @@ export const fr = {
   appWatchCell: 'Cellule',
   appWatchValue: 'Valeur',
   appWatchFormula: 'Formule',
+  appLinksPanel: 'Liaisons externes',
+  appLinksPanelDetail: 'Lister, mettre à jour et rompre les liaisons vers d’autres classeurs',
+  appLinksUpdate: 'Mettre à jour les valeurs',
+  appLinksNone: 'Ce classeur ne contient aucune liaison vers un autre classeur.',
+  appLinksUnsaved: 'Enregistrez ce classeur avant de lister ses liens externes.',
+  appLinksSource: 'Source',
+  appLinksStatus: 'État',
+  appLinksSheets: 'Feuilles',
+  appLinksLocate: 'Localiser le fichier source',
+  appLinksReachable: 'Disponible',
+  appLinksBroken: 'Indisponible',
+  appLinksBreak: 'Rompre le lien',
+  appLinksBreakConfirm: 'Confirmer la rupture',
+  appLinksChangeSource: 'Modifier la source',
   appGroupCalculation: 'Calcul',
   appCalculationOptions: 'Options de calcul',
   appCalculationOptionsTitle: 'Recalcul automatique ou manuel',
@@ -1217,8 +1258,16 @@ export const fr = {
   appGroupGetData: 'Obtenir des données',
   appFromTextCsv: 'À partir de texte/CSV',
   appRefreshAll: 'Actualiser tout',
+  appRefreshQuery: 'Actualiser la requête',
+  appQueryConnectionsTitle: 'Actualiser les requêtes du classeur',
+  appQueryRefreshing: 'Actualisation de {name}…',
+  appQueryRefreshed: '{name} actualisé ({rows} lignes)',
+  appQueryRefreshedClipped: '{name} actualisé ({rows} lignes, {dropped} hors de la plage fixe)',
+  appQueryRefreshFailed: 'Impossible d’actualiser {name}',
   appWorkbookNoPivot: 'Aucun tableau croisé dans ce classeur.',
   appRefreshAllTitle: 'Actualiser tous les tableaux croisés',
+  appQueriesConnections: 'Requêtes et connexions',
+  appQueriesConnectionsTitle: 'Lister les requêtes et connexions de données du classeur',
   appErrorCheckingDetail: 'Rechercher les valeurs d’erreur de la feuille',
   appErrorsFound: '{count} erreurs — à {cell} : {value}',
   appCheckingErrors: 'Recherche d’erreurs dans toute la feuille…',
@@ -1253,6 +1302,7 @@ export const fr = {
   appGroupForecast: 'Prévision',
   appWhatIfAnalysis: 'Analyse de scénarios',
   appGoalSeek: 'Valeur cible',
+  appDataTable: 'Table de données',
   appWhatIfTitle: 'Trouver une entrée pour une valeur cible',
   appGoalSeekNeedsFormula: 'La cellule à définir doit contenir une formule.',
   appGoalSeekByCellNotNumber: 'La cellule à modifier doit contenir un nombre ou être vide.',
@@ -1335,6 +1385,21 @@ export const fr = {
   appOpenFileFirst: "Ouvrez d'abord un fichier",
   appNoPassword: 'Sans mot de passe',
   appProtectWorkbook: 'Protéger le classeur',
+  appChangePassword: 'Modifier le mot de passe',
+  appWorkbookPasswordChanged: 'Le mot de passe du classeur a été mis à jour.',
+  appEncryptedOpenTitle: 'Ouvrir un classeur protégé par mot de passe',
+  appEncryptedOpenCopy: 'Saisissez le mot de passe pour déverrouiller ce classeur.',
+  appEncryptedPasswordLabel: 'Mot de passe',
+  appEncryptedOpen: 'Ouvrir',
+  appChangePasswordTitle: 'Modifier le mot de passe du classeur',
+  appChangePasswordCopy: 'Choisissez un nouveau mot de passe et confirmez-le ci-dessous.',
+  appNewPasswordLabel: 'Nouveau mot de passe',
+  appConfirmPasswordLabel: 'Confirmer le nouveau mot de passe',
+  appPasswordsMismatch: 'Les mots de passe ne correspondent pas.',
+  appPasswordUpdateFailed: 'Impossible de mettre à jour le mot de passe du classeur.',
+  appPasswordUpdating: 'Mise à jour…',
+  appUpdatePassword: 'Mettre à jour le mot de passe',
+  appWorkbookNotPasswordProtected: "Ce classeur n'est pas protégé par un mot de passe d'ouverture.",
   appAllowEditRanges: 'Permettre la modification des plages',
   appGroupClipboard: 'Presse-papiers',
   appPaste: 'Coller',
@@ -1525,6 +1590,11 @@ export const fr = {
   appNotePicturesNone: "Aucune note de ce classeur ne contient d'image.",
   appNotePictureUnavailable: 'Cette image ne peut pas être affichée.',
   appNotePicturesToggle: 'Images des notes',
+  appNoteInsertPicture: 'Insérer une image',
+  appNotePictureInserted:
+    'Image ajoutée au commentaire de {cell}. Enregistrez pour l’écrire dans le fichier.',
+  appNotePictureRemoved: 'Image retirée du commentaire de {cell}.',
+  appNotePictureRemove: 'Retirer l’image',
   appCommentsPaneTitle: 'Commentaires',
   appThreadReply: 'Répondre',
   appThreadReplyPlaceholder: 'Répondre…',
@@ -1595,4 +1665,30 @@ export const fr = {
   appVisualFlipV: 'Retourner verticalement',
   appVisualFlipH: 'Retourner horizontalement',
   appCtxPasteVisual: "Coller l'image ou la forme",
+
+  // ── Spelling check (F7 / Review ▸ Proofing) ──
+  appSpellTitle: 'Orthographe',
+  appSpellBtnDetail: 'Vérifier le texte de la feuille (F7)',
+  appSpellToggle: "Vérifier l'orthographe",
+  appSpellToggleTip:
+    "Active la vérification orthographique (F7 et le bouton Révision) ; désactivée, les zones de commentaire n'affichent plus les soulignements",
+  appSpellOn: 'Vérification orthographique activée.',
+  appSpellOff:
+    'La vérification orthographique est désactivée. Réactivez-la dans Révision ▸ Vérification.',
+  appSpellRecheck: 'Revérifier',
+  appSpellNone: "Aucune faute d'orthographe suspectée.",
+  appSpellFindings: '{count} fautes suspectées. Cliquez une ligne pour la localiser.',
+  appSpellTruncated: 'Trop de cellules de texte ; seules les premières ont été vérifiées.',
+  appSpellColWord: 'Mot suspect',
+  appSpellIgnore: 'Ignorer',
+  appSpellIgnoreAll: 'Ignorer tout',
+  appSpellLearn: 'Ajouter au dictionnaire',
+  appSpellNoSuggestions: 'Aucune suggestion',
+  appSpellIgnoredAll: '« {word} » ne sera plus signalé pendant cette session.',
+  appSpellLearned: '« {word} » a été ajouté au dictionnaire.',
+  appSpellChanged: '{address} corrigé.',
+  appSpellChangeFailed: 'Impossible de corriger {address}.',
+  appSpellUnavailable: "La correction orthographique n'est pas disponible dans cette fenêtre.",
+  appSpellReplaceAll: 'Tout remplacer par « {suggestion} »',
+  appSpellChangedAll: '{count} cellules de « {word} » corrigées.',
 } satisfies Record<keyof typeof zh, string>

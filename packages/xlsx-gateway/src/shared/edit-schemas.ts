@@ -46,7 +46,10 @@ export const drawingAnchorSchema = z
 /// rewritten, instead of letting Apply succeed and every save fail.
 export const MAX_PATCH_ENTRY_BYTES = 500 * 1024 * 1024
 
-export const hexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/)
+export const hexColorSchema = z
+  .string()
+  .trim()
+  .regex(/^#[0-9A-Fa-f]{6}$/)
 
 /// styles.xml color: literal rgb, or a theme slot Excel re-resolves on theme change.
 export const themeColorSchema = z
@@ -228,6 +231,11 @@ export const workbookChartEditSchema = z
             categories: z.array(z.string().max(CHART_CATEGORY_WIRE_MAX)).max(1_000).optional(),
             categoriesRef: z.string().max(512).optional(),
             color: hexColorSchema.optional(),
+            /// Combo charts: plot group the series joins. A fully-tagged set
+            /// re-derives the plotArea groups (single family = plain chart).
+            plot: z.enum(['barChart', 'lineChart']).optional(),
+            /// Combo charts: the series rides the secondary axis pair.
+            secondaryAxis: z.boolean().optional(),
           })
           .strict(),
       )

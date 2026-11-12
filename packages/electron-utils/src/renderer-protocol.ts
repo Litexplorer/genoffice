@@ -3,6 +3,7 @@ import type { CustomScheme } from 'electron'
 import { pathToFileURL } from 'node:url'
 import {
   DOCX_MEDIA_SCHEME_PRIVILEGE,
+  SLIDE_MEDIA_SCHEME_PRIVILEGE,
   RENDERER_SCHEME,
   RENDERER_SCHEME_PRIVILEGE,
   resolveRendererFile,
@@ -32,6 +33,7 @@ export function registerRendererScheme(extraSchemes: CustomScheme[] = []): void 
   registerPrivilegedSchemesOnce([
     RENDERER_SCHEME_PRIVILEGE,
     DOCX_MEDIA_SCHEME_PRIVILEGE,
+    SLIDE_MEDIA_SCHEME_PRIVILEGE,
     ...extraSchemes,
   ])
 }

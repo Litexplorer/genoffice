@@ -33,6 +33,14 @@ export {
 } from './app-menu'
 export { GITHUB_REPO_URL } from './github-menu'
 export {
+  decryptOoxml,
+  encryptOoxml,
+  isCfbFile,
+  isEncryptedOoxml,
+  OoxmlDecryptError,
+  type OoxmlDecryptFailReason,
+} from './ooxml-encryption'
+export {
   AUTHOR_NAME_KEY,
   AUTHOR_NAME_MAX,
   configuredAuthorName,
@@ -57,6 +65,14 @@ export {
 } from './default-save-dir'
 export { installNavigationGuard } from './navigation-guard'
 export {
+  decodeChunks,
+  decodeChunksUtf8,
+  decodeCommandOutput,
+  decodeUtf8,
+  windowsOemCodePage,
+  type DecodeCommandOptions,
+} from './console-output'
+export {
   DROP_OPEN_CHANNEL,
   droppableFilePaths,
   installDropOpenBridge,
@@ -79,6 +95,19 @@ export {
   readBodyCapped,
   remoteImageHeaders,
 } from './remote-image'
+export {
+  MAX_REMOTE_TABLE_BYTES,
+  MAX_REMOTE_TABLE_CELL_CHARS,
+  MAX_REMOTE_TABLE_COLUMNS,
+  MAX_REMOTE_TABLE_ROWS,
+  detectDelimiter,
+  fetchRemoteTable,
+  parseDelimitedRow,
+  parseDelimitedTable,
+  parseHtmlTable,
+  type RemoteTable,
+  type RemoteTableSource,
+} from './remote-table'
 export { GENERATED_IMAGE_DIR, readGeneratedImage, storeGeneratedImage } from './generated-images'
 export {
   buildPrintableHtml,
@@ -109,6 +138,7 @@ export {
 export {
   RENDERER_SCHEME,
   DOCX_MEDIA_SCHEME_PRIVILEGE,
+  SLIDE_MEDIA_SCHEME_PRIVILEGE,
   RENDERER_SCHEME_PRIVILEGE,
   rendererUrl,
   resolveRendererFile,
@@ -119,7 +149,7 @@ export {
   registerPrivilegedSchemesOnce,
   registerRendererScheme,
 } from './renderer-protocol'
-export { atomicWriteFile, writeJsonAtomic } from './atomic-write'
+export { atomicCopyFile, atomicWriteFile, atomicWriteVia, writeJsonAtomic } from './atomic-write'
 export {
   PRINT_READY_SCRIPT,
   printHtmlDocument,
@@ -129,3 +159,12 @@ export {
 } from './print-window'
 export { abortOnDestroyed, type DestroyableSender } from './abort-on-destroyed'
 export { recoveryCopyDiskNewer } from './recovery-copy'
+export {
+  LEGACY_IMPORT_KINDS,
+  LEGACY_IMPORT_SKIP_KEY,
+  readLegacyImportPrompt,
+  readLegacyImportSkip,
+  writeLegacyImportPrompt,
+  writeLegacyImportSkip,
+  type LegacyImportKind,
+} from './legacy-import-prefs'
