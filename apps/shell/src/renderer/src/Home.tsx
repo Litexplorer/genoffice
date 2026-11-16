@@ -28,6 +28,7 @@ import { useDismissablePopover, useEscapeToClose } from '@genoffice/ui'
 import { fileCountLabel, visiblePageCount } from './counts'
 import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
+import { ConfirmDialog } from './ConfirmDialog'
 import { SettingsModal } from './SettingsModal'
 import type { SettingsTarget } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
@@ -61,7 +62,7 @@ const GREET_ASK_KEYS = [
    width, so it ellipsizes and a hover ScreenTip carries the full list. Keep in
    sync with the main-process open-dialog filter (OPEN_DIALOG_EXTENSIONS). */
 const OPEN_LOCAL_EXTENSIONS =
-  '.docx / .doc / .dot / .odt / .ott / .hwpx / .hwp / .xlsx / .xlsm / .xls / .csv / .tsv / .ods / .ots / .pptx / .odp / .otp / .pdf / .md / .html'
+  '.docx / .doc / .dot / .odt / .ott / .hwpx / .hwp / .xlsx / .xlsm / .xls / .csv / .tsv / .ods / .ots / .pptx / .ppt / .odp / .otp / .pdf / .md / .html'
 
 /** drag payload of home file/folder rows (JSON array of absolute paths) */
 const DRAG_PATHS_MIME = 'application/x-genoffice-paths'
@@ -874,6 +875,7 @@ function AccountEntry({
       }[loginError]
     : null
 
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
   const doLogout = () => {
     setLoggingOut(true)
     statusSeq.current++
@@ -942,10 +944,24 @@ function AccountEntry({
             setSettingsOpen(false)
             startLogin()
           }}
-          onLogout={doLogout}
+          onLogout={() => setConfirmSignOut(true)}
           skillUpdateDue={skillUpdate}
           onSkillUpdateDue={setSkillUpdate}
           target={target}
+        />
+      )}
+      {confirmSignOut && (
+        <ConfirmDialog
+          title={t('confirmSignOutTitle')}
+          body={t('confirmSignOutBody')}
+          confirmLabel={t('logout')}
+          cancelLabel={t('cancel')}
+          danger
+          onCancel={() => setConfirmSignOut(false)}
+          onConfirm={() => {
+            setConfirmSignOut(false)
+            doLogout()
+          }}
         />
       )}
       {!settingsOpen && waiting && authUrl && (

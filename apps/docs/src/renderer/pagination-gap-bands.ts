@@ -18,6 +18,8 @@ export interface GapBand {
   h: number
   /** mixed-column pull-up the gap carries as a negative top margin */
   pull: number
+  /** the band is a page turn (a repeated-header clone only adds space) */
+  turn?: boolean
 }
 
 export interface GapBandIndex {
@@ -32,6 +34,9 @@ export interface GapBandIndex {
  *  carry spacers of a split floating table do not (they move the anchor, not
  *  the page) */
 const GAP_SELECTOR = '.page-gap:not(.page-gap-carry), .page-repeat-header'
+
+/** the bands that are page turns, i.e. where the band top is the page boundary */
+const TURN_SELECTOR = '.page-gap:not(.page-gap-carry)'
 
 /**
  * collect the page-gap bands of the flow element
@@ -54,6 +59,7 @@ export function collectGapBands(
       off: (r.top - origin) / zoomFactor,
       h: r.height / zoomFactor,
       pull: Math.max(0, -parseFloat(el.style.marginTop) || 0),
+      turn: el.matches(TURN_SELECTOR),
     })
   }
   return bands
@@ -84,6 +90,32 @@ export function compileGapBands(bands: GapBand[]): GapBandIndex {
  */
 export function gapAboveAt(index: GapBandIndex, midDoc: number): { above: number; pull: number } {
   const { bands, fulls, pulls } = index
+  const last = bandIndexAt(bands, midDoc)
+  if (last < 0) return { above: 0, pull: 0 }
+  const band = bands[last]
+  return {
+    above: fulls[last] + Math.min(band.h, midDoc - band.off),
+    pull: pulls[last] + band.pull,
+  }
+}
+
+/**
+ * whether the midpoint falls inside a page-turn band
+ * index - bands compiled for the current layout
+ * midDoc - the midpoint in the same coordinate space
+ * inside a band the midpoint sits on the page boundary itself, so the page below
+ * it is the one on screen
+ */
+export function gapTurnAt(index: GapBandIndex, midDoc: number): boolean {
+  const { bands } = index
+  const last = bandIndexAt(bands, midDoc)
+  if (last < 0) return false
+  const band = bands[last]
+  return band.turn === true && midDoc > band.off && midDoc < band.off + band.h
+}
+
+/** index of the last band starting above the midpoint, -1 when there is none */
+function bandIndexAt(bands: readonly GapBand[], midDoc: number): number {
   let lo = 0
   let hi = bands.length
   while (lo < hi) {
@@ -91,11 +123,5 @@ export function gapAboveAt(index: GapBandIndex, midDoc: number): { above: number
     if (bands[mid].off < midDoc) lo = mid + 1
     else hi = mid
   }
-  const last = lo - 1
-  if (last < 0) return { above: 0, pull: 0 }
-  const band = bands[last]
-  return {
-    above: fulls[last] + Math.min(band.h, midDoc - band.off),
-    pull: pulls[last] + band.pull,
-  }
+  return lo - 1
 }

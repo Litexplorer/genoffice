@@ -72,7 +72,7 @@ import {
   type TablePartStyle,
   type TableStyleFlags,
 } from './table-style'
-import { decodeNumericCharRefs, percentFraction } from './xml-utils'
+import { decodeNumericCharRefs, percentFraction, percentPoints } from './xml-utils'
 import { readRedactLabel } from './redaction-xml'
 
 const parser = new XMLParser({
@@ -316,6 +316,14 @@ const MATH_AC_RE =
   /<mc:AlternateContent\b[^>]*>\s*<mc:Choice\b[^>]*>\s*<a14:m\b[\s\S]*?<\/mc:AlternateContent>/g
 
 /**
+ * An a14:m equation a producer wrote bare, without the mc:AlternateContent
+ * wrapper PowerPoint uses — WPS/Aspose exports do this, including inside table
+ * cells (genoffice#2644). Matched after MATH_AC_RE, so the inner block of a
+ * wrapped equation is never touched.
+ */
+const BARE_MATH_RE = /<a14:m\b[^>]*(?:\/>|>[\s\S]*?<\/a14:m>)/g
+
+/**
  * Equations are paragraph children fast-xml-parser would file outside the run
  * list (losing their position and, on rebuild, the block itself). They become a
  * run carrying the block verbatim (base64 in an attribute, TextRun.rawXml after
@@ -359,6 +367,9 @@ function parseShapeFragment(
   // fields in document order instead of being appended after all plain runs.
   const semanticXml = fragXml
     .replace(MATH_AC_RE, mathBlockAsRun)
+    // a bare a14:m: PowerPoint never writes it, but the equation would otherwise
+    // disappear from the paragraph (and from a table cell's text) on parse
+    .replace(BARE_MATH_RE, mathBlockAsRun)
     .replace(/<a:br\b[^>]*\/>|<a:br\b[\s\S]*?<\/a:br>/g, '<a:r><a:t>\n</a:t></a:r>')
     .replace(/<a:fld\b/g, '<a:r')
     .replace(/<\/a:fld>/g, '</a:r>')
@@ -492,6 +503,11 @@ function parseSpShape(
       ? parseCustGeom(rawXml || anchor.originalXml, transform.offset.cx, transform.offset.cy)
       : undefined
   let fill = parseFill(spPr, ctx)
+  // PowerPoint paints an explicit spPr fill over useBgFill="1" (Designer writes both; the
+  // slide-background fill only applies when spPr carries no fill of its own)
+  const useBgFill =
+    (node['@_useBgFill'] === '1' || node['@_useBgFill'] === 'true') &&
+    (fill === undefined || fill.type === 'none')
   const txBody = node['p:txBody']
   // Text style inheritance chain: placeholders inherit font size/color/font defaults from
   // layout/master; every other shape (text box or autoshape, on the slide, layout or master)
@@ -626,7 +642,7 @@ function parseSpShape(
     ...(customGeometry ? { customGeometry } : {}),
     ...(!presetGeometry && !customGeometry && !ph ? { noGeometry: true as const } : {}),
     fill,
-    ...(node['@_useBgFill'] === '1' || node['@_useBgFill'] === 'true' ? { useBgFill: true } : {}),
+    ...(useBgFill ? { useBgFill: true } : {}),
     ...(fillOverlay && fillOverlay.type !== 'none' ? { fillOverlay } : {}),
     ...(stroke ? { stroke } : {}),
     ...(shadow ? { shadow } : {}),
@@ -3778,8 +3794,7 @@ function parseTextBody(
 
 /** <a:spcPct val="150000"/> or val="150%" → 150 (%). */
 function spcPct(node: any): number | undefined {
-  const ratio = percentFraction(node?.['a:spcPct']?.['@_val'])
-  return ratio != null ? ratio * 100 : undefined
+  return percentPoints(node?.['a:spcPct']?.['@_val'])
 }
 
 /** <a:spcPts val="2400"/> → 24 (pt). */
@@ -4297,7 +4312,7 @@ function parseRun(r: any, ctx: ParseContext, dflt?: LevelTextStyle): TextRun {
     ...(ownFontSize != null ? {} : { fontSizeImplicit: true }),
     ...(ownLetterSpacing != null ? { letterSpacing: ownLetterSpacing } : {}),
     ...(rPr['@_kern'] != null ? { kern: (parseInt(rPr['@_kern'], 10) || 0) / 100 } : {}),
-    ...(rPr['@_baseline'] ? { baseline: (percentFraction(rPr['@_baseline']) ?? 0) * 100 } : {}),
+    ...(rPr['@_baseline'] ? { baseline: percentPoints(rPr['@_baseline']) ?? 0 } : {}),
     fontFamily,
     ...(latinFamily ? { latinFamily } : {}),
     ...(fontScriptHint != null ? { fontScriptHint } : {}),

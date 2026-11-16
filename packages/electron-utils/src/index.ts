@@ -149,7 +149,13 @@ export {
   registerPrivilegedSchemesOnce,
   registerRendererScheme,
 } from './renderer-protocol'
-export { atomicCopyFile, atomicWriteFile, atomicWriteVia, writeJsonAtomic } from './atomic-write'
+export {
+  atomicCopyFile,
+  atomicWriteFile,
+  atomicWriteVia,
+  restrictFileToOwner,
+  writeJsonAtomic,
+} from './atomic-write'
 export {
   PRINT_READY_SCRIPT,
   printHtmlDocument,
@@ -168,3 +174,11 @@ export {
   writeLegacyImportSkip,
   type LegacyImportKind,
 } from './legacy-import-prefs'
+export {
+  PDF_DEFAULT_ZOOM_KEY,
+  PDF_DEFAULT_ZOOMS,
+  readPdfDefaultZoom,
+  sanitizePdfDefaultZoom,
+  writePdfDefaultZoom,
+  type PdfDefaultZoom,
+} from './pdf-zoom-prefs'

@@ -3,6 +3,7 @@ import {
   collectGapBands,
   compileGapBands,
   gapAboveAt,
+  gapTurnAt,
   type GapBand,
 } from '../src/renderer/pagination-gap-bands'
 
@@ -60,8 +61,8 @@ describe('collectGapBands', () => {
 
     // the carry spacer is not a page turn: it never becomes a band
     expect(bands).toEqual([
-      { off: 200, h: 200, pull: 20 },
-      { off: 500, h: 25, pull: 0 },
+      { off: 200, h: 200, pull: 20, turn: true },
+      { off: 500, h: 25, pull: 0, turn: false },
     ])
   })
 
@@ -76,5 +77,26 @@ describe('collectGapBands', () => {
     const bands = collectGapBands(pm, 1, (el) => el.classList.contains('page-repeat-header'))
 
     expect(bands.map((b) => b.off)).toEqual([400])
+  })
+})
+
+describe('gapTurnAt', () => {
+  const bands: GapBand[] = [
+    { off: 100, h: 40, pull: 0, turn: true },
+    { off: 300, h: 60, pull: 0, turn: false },
+  ]
+  const index = compileGapBands(bands)
+
+  it('is true only inside a page-turn band', () => {
+    expect(gapTurnAt(index, 120)).toBe(true)
+    // a repeated-header clone is no page boundary
+    expect(gapTurnAt(index, 320)).toBe(false)
+  })
+
+  it('is false outside every band and exactly on a band edge', () => {
+    expect(gapTurnAt(index, 50)).toBe(false)
+    expect(gapTurnAt(index, 100)).toBe(false)
+    expect(gapTurnAt(index, 140)).toBe(false)
+    expect(gapTurnAt(index, 10_000)).toBe(false)
   })
 })

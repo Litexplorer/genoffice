@@ -21,7 +21,7 @@ export type MetafileWorkerResponse = { id: number; url: string | null }
 
 self.onmessage = async (e: MessageEvent<MetafileWorkerRequest>) => {
   const { id, bytes, mime, maxSidePx } = e.data
-  let url: string | null = null
+  let url: string | null
   try {
     url = await metafileToDataUrl(new Uint8Array(bytes), mime, { maxSidePx })
   } catch {

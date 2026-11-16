@@ -125,14 +125,14 @@ export function rasterizeMetafile(url: string): Promise<string | null> {
   return pending
 }
 
-let queue: HTMLImageElement[] = []
+const queue: HTMLImageElement[] = []
 /** pictures already picked up: a reader that mounts a second editor (document
  *  swap, tab reuse) must not enqueue the same node twice — and must not lose
  *  the tail a previous observer had queued */
 const queued = new WeakSet<HTMLImageElement>()
 let active = 0
 let timer: ReturnType<typeof setTimeout> | null = null
-let waiters: Array<() => void> = []
+const waiters: Array<() => void> = []
 
 /** idle scheduling: conversions must never delay typing, scrolling or a pass */
 function requestIdle(cb: () => void): void {
