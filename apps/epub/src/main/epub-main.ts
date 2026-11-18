@@ -144,11 +144,11 @@ export function epubFileRenamed(contents: WebContents, oldPath: string, newPath:
 }
 
 /** Drop the tab's book once its view goes away so the zip bytes can be collected. */
-export function releaseEpubForWebContents(contents: WebContents): void {
-  const id = bookIdByWc.get(contents.id)
+export function releaseEpubForWebContents(wcId: number): void {
+  const id = bookIdByWc.get(wcId)
   if (id) books.delete(id)
-  bookIdByWc.delete(contents.id)
-  pendingPathByWc.delete(contents.id)
+  bookIdByWc.delete(wcId)
+  pendingPathByWc.delete(wcId)
 }
 
 async function consumePending(event: IpcMainInvokeEvent): Promise<EpubOpenResult | null> {
@@ -174,8 +174,10 @@ export function createEpubView(openPath?: string | null): WebContentsView {
       sandbox: true,
     },
   })
-  if (openPath) pendingPathByWc.set(view.webContents.id, openPath)
-  view.webContents.once('destroyed', () => releaseEpubForWebContents(view.webContents))
+  // view.webContents is undefined inside 'destroyed', so capture the id first
+  const wcId = view.webContents.id
+  if (openPath) pendingPathByWc.set(wcId, openPath)
+  view.webContents.once('destroyed', () => releaseEpubForWebContents(wcId))
   void view.webContents.loadURL(rendererUrl(runtime.rendererUrl, 'epub'))
   return view
 }
