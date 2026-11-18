@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core'
 import { PAGE_TURN_SEL } from './pagination-gaps'
-import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state'
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 
 const key = new PluginKey('pageGapArrowNav')
@@ -14,6 +14,29 @@ function scrollableAncestor(el: HTMLElement | null): HTMLElement | null {
     }
   }
   return (document.scrollingElement as HTMLElement | null) ?? null
+}
+
+/**
+ * True when a resolved position sits in body text rather than on a page
+ * widget.
+ *
+ * Crossing a page gap hit-tests one line past the gap, and that point can
+ * resolve onto a page break, a protected passthrough run or another leaf node.
+ * The dispatcher then selects the NODE: from a node selection neither vertical
+ * nor horizontal motion recovers, because every later press re-measures through
+ * the widget (measured: 1.8 s per key on a 297-page document, against 55 ms for
+ * the same keys in body text). Such a press is handed back to native, which
+ * moves the caret one body line as the user expects.
+ */
+export function landingIsBodyText(
+  doc: { resolve(pos: number): { parent: { isTextblock: boolean } } },
+  pos: number,
+): boolean {
+  try {
+    return doc.resolve(pos).parent.isTextblock === true
+  } catch {
+    return false
+  }
 }
 
 type Rect = { left: number; right: number; top: number; bottom: number }
@@ -175,10 +198,28 @@ function crossPageGap(view: EditorView, dir: -1 | 1, extend: boolean): boolean {
     restore()
     return consumePress(selection.head)
   }
+  // One line past the gap is not always body text: a page break or a protected
+  // run there turns the dispatch into a NODE selection, and every later press
+  // then re-measures through that widget (measured: 1.8 s/key on 297 pages,
+  // against 55 ms in body text). Native lands on the same leaf, so declining is
+  // not enough — step over the widget to the next text position instead.
+  let landing = target.pos
+  if (!landingIsBodyText(doc, landing)) {
+    const skipped = Selection.findFrom(doc.resolve(landing), dir, true)
+    if (!(skipped instanceof TextSelection)) {
+      restore()
+      return false
+    }
+    landing = skipped.head
+    if (!landingIsBodyText(doc, landing)) {
+      restore()
+      return false
+    }
+  }
   // the landing must be the line adjacent to the gap: a hit-test that
   // resolves further away (stale geometry, margins) would dispatch a
   // multi-paragraph jump (r143)
-  const landed = view.coordsAtPos(target.pos)
+  const landed = view.coordsAtPos(landing)
   if (
     dir === 1
       ? landed.top > landingGapRect.bottom + lineH * 2
@@ -188,8 +229,14 @@ function crossPageGap(view: EditorView, dir: -1 | 1, extend: boolean): boolean {
     return consumePress(selection.head)
   }
   const next = extend
-    ? TextSelection.create(doc, selection.anchor, target.pos)
-    : Selection.near(doc.resolve(target.pos), dir)
+    ? TextSelection.create(doc, selection.anchor, landing)
+    : Selection.near(doc.resolve(landing), dir)
+  // Selection.near promotes a position next to a leaf to a NODE selection, and
+  // that is the state this whole guard exists to avoid
+  if (!(next instanceof TextSelection)) {
+    restore()
+    return false
+  }
   if (next.head === selection.head) {
     restore()
     return false
@@ -271,7 +318,16 @@ export const PageGapNavExtension = Extension.create({
           }
           nativeArrow = null
           const selection = newState.selection
-          if (!(selection instanceof TextSelection)) return null
+          if (!(selection instanceof TextSelection)) {
+            // native vertical motion at a page boundary lands on the page
+            // widget itself, i.e. a NODE selection: from there every later
+            // press re-measures through the widget (1.8 s/key on 297 pages).
+            // Step over it to the adjacent text in the pressed direction.
+            if (!(selection instanceof NodeSelection)) return null
+            const text = Selection.findFrom(selection.$from, pending.dir, true)
+            if (!(text instanceof TextSelection)) return null
+            return newState.tr.setSelection(text).scrollIntoView()
+          }
           if (oldState.selection.head !== pending.head) return null
           const moved = selection.head - pending.head
           if (pending.dir === 1 ? moved <= 0 : moved >= 0) return null

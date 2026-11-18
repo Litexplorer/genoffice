@@ -580,6 +580,7 @@ import {
   stepDocsZoom,
   type ZoomFitMode,
 } from './wheel-zoom'
+import { createZoomCommitter } from './zoom-commit'
 import {
   allocateListNumId as allocateListNumIdImpl,
   addPictureBullet,
@@ -868,6 +869,29 @@ export function App() {
   // viewport-only refresh below.
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
+  // A zoom change invalidates the computed style of every node under `.doc-zoom`
+  // — 600-900 ms of Recalculate Style on a 297-page document — and Chromium
+  // hands the next wheel event to the renderer only after that pass finishes.
+  // Debouncing is the only lever left at this layer: the committer keeps the
+  // newest target and applies it once the input has been quiet, so a gesture
+  // costs one re-layout instead of one per notch.
+  const zoomCommitRef = useRef<ReturnType<typeof createZoomCommitter> | null>(null)
+  if (!zoomCommitRef.current)
+    zoomCommitRef.current = createZoomCommitter({ apply: (next) => setZoom(next) })
+  /** the value the next zoom step builds on: the in-flight target, else the committed zoom */
+  const zoomTarget = useCallback(
+    () => zoomCommitRef.current?.base(zoomRef.current) ?? zoomRef.current,
+    [],
+  )
+  /** stage `next`; the committer applies it once the input settles */
+  const requestZoom = useCallback((next: number) => {
+    zoomCommitRef.current?.request(clampDocsZoom(next))
+  }, [])
+  /** Zoom In / Zoom Out from a button or shortcut: one step off the in-flight target */
+  const zoomStep = useCallback(
+    (dir: 1 | -1) => requestZoom(stepDocsZoom(zoomTarget(), dir)),
+    [requestZoom, zoomTarget],
+  )
   const zoomRefreshRef = useRef<(() => void) | null>(null)
   const scrollContainerRef = useRef<HTMLElement>(null)
   /** bumps after every pagination pass: the canvas' page gaps are in place */
@@ -2104,15 +2128,17 @@ export function App() {
       if (!intent) return
       const rect = scrollContainerRef.current?.getBoundingClientRect()
       const anchor = rect ? { vx: e.clientX - rect.left, vy: e.clientY - rect.top } : null
-      setZoom((z) => {
-        const next = nextDocsZoom(z, intent, e.deltaY)
-        if (next !== z) zoomAnchorRef.current = anchor
-        return next
-      })
+      // step from the in-flight target, not from the committed state: the
+      // commit lands after the gesture, so the committed zoom is stale here
+      const base = zoomTarget()
+      const next = nextDocsZoom(base, intent, e.deltaY)
+      if (next === base) return
+      zoomAnchorRef.current = anchor
+      requestZoom(next)
     }
     window.addEventListener('wheel', onWheel, { passive: false })
     return () => window.removeEventListener('wheel', onWheel)
-  }, [])
+  }, [requestZoom, zoomTarget])
 
   // Keep the document point under the anchor (cursor for wheel zoom, viewport
   // center otherwise) fixed across a zoom change. Runs after the zoomed layout
@@ -3619,9 +3645,11 @@ export function App() {
       const applied = fitZoomFor(mode)
       if (applied == null) return
       lastFitRef.current = { mode, value: applied }
-      setZoom(applied)
+      // same whole-canvas re-lay-out as a wheel step: share the zoom gate so a
+      // resize drag that keeps re-fitting does not re-lay-out per observer tick
+      requestZoom(applied)
     },
-    [fitZoomFor],
+    [fitZoomFor, requestZoom],
   )
   const zoomFit = useCallback(
     (mode: ZoomFitMode) => {
@@ -3683,6 +3711,8 @@ export function App() {
     fit: { mode: ZoomFitMode; value: number } | null
   } | null>(null)
   useLayoutEffect(() => {
+    // a staged zoom would land after the swap and overwrite the snapshot
+    zoomCommitRef.current?.cancel()
     if (readMode) {
       preReadZoomRef.current = { zoom: zoomLiveRef.current, fit: lastFitRef.current }
       lastFitRef.current = null
@@ -6682,16 +6712,16 @@ export function App() {
           editor?.chain().focus().redo().run()
           break
         case 'zoom-in':
-          setZoom((z) => stepDocsZoom(z, 1))
+          zoomStep(1)
           break
         case 'zoom-out':
-          setZoom((z) => stepDocsZoom(z, -1))
+          zoomStep(-1)
           break
         case 'zoom-100':
-          setZoom(100)
+          requestZoom(100)
           break
         case 'zoom-set':
-          if (payload) setZoom(clampDocsZoom(Number(payload)))
+          if (payload) requestZoom(clampDocsZoom(Number(payload)))
           break
         case 'zoom-page-width':
           zoomFit('width')
@@ -6863,6 +6893,8 @@ export function App() {
     exportImages,
     printDoc,
     zoomFit,
+    zoomStep,
+    requestZoom,
     openStats,
     startNewComment,
     runAiProofread,
@@ -9052,7 +9084,7 @@ export function App() {
                   </button>
                 </div>
               )}
-              <button className="zoom-btn" onClick={() => setZoom((z) => stepDocsZoom(z, -1))}>
+              <button className="zoom-btn" onClick={() => zoomStep(-1)}>
                 −
               </button>
               <input
@@ -9062,9 +9094,9 @@ export function App() {
                 max={DOCS_ZOOM_MAX}
                 step={10}
                 value={Math.round(zoom)}
-                onChange={(e) => setZoom(Number(e.target.value))}
+                onChange={(e) => requestZoom(Number(e.target.value))}
               />
-              <button className="zoom-btn" onClick={() => setZoom((z) => stepDocsZoom(z, 1))}>
+              <button className="zoom-btn" onClick={() => zoomStep(1)}>
                 +
               </button>
               <button
@@ -9100,7 +9132,9 @@ export function App() {
         <ZoomDialog
           zoom={zoom}
           fitValue={fitZoomFor}
-          onApply={(target) => (typeof target === 'number' ? setZoom(target) : zoomFit(target))}
+          onApply={(target) =>
+            typeof target === 'number' ? requestZoom(target) : zoomFit(target)
+          }
           onClose={() => setShowZoomDialog(false)}
         />
       )}
