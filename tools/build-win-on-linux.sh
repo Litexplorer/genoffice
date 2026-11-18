@@ -55,7 +55,7 @@ wine --version >/dev/null 2>&1 || fail "wine is installed but not runnable"
 
 # cargo walks up looking for a workspace: an unrelated Cargo.toml above this
 # checkout makes every package here "believe it's in a workspace when it's not".
-ancestor=$(cd "$ROOT" && while [ "$PWD" != "/" ]; do cd ..; [ -f Cargo.toml ] && { echo "$PWD/Cargo.toml"; break; }; done)
+ancestor=$(cd "$ROOT" && while [ "$PWD" != "/" ]; do cd ..; [ -f Cargo.toml ] && { echo "$PWD/Cargo.toml"; break; }; done) || true
 if [ -n "$ancestor" ]; then
   printf 'warning: %s sits above this checkout. cargo will refuse to build the\n' "$ancestor" >&2
   printf '         sidecars ("believes it is in a workspace when it is not"). Either\n' >&2
