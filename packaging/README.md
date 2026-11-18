@@ -66,3 +66,31 @@ Flatpak route keeps the real sandbox via Zypak instead.
 
 `docker/` builds a headless image for batch PDF conversion; see
 `docker/README.md`.
+
+## Windows installer, built on Linux
+
+`tools/build-win-on-linux.sh` packages the NSIS installer without a Windows
+machine: electron-builder produces it on Linux, but only once the Windows-only
+native pieces exist and Wine is available to stamp the exe.
+
+```sh
+# one-time host setup
+sudo apt-get install mingw-w64 wine64
+rustup target add x86_64-pc-windows-gnu
+
+# full build: cross-build the sidecars, build the renderers, package
+./tools/build-win-on-linux.sh
+```
+
+The script checks the toolchain up front and stops with an actionable message
+instead of letting electron-builder exit 0 on a missing `extraResources` source
+(which would ship a silently dead Sheets). It cross-builds
+`xlsx-sidecar.exe` and `win-clipboard-helper.exe` for
+`x86_64-pc-windows-gnu`, runs `notices` + `build:all`, then
+`electron-builder --win`; the artifact lands in
+`apps/shell/release/GenOffice Setup <version>.exe` with its `.blockmap`.
+
+`--skip-native` reuses sidecars built elsewhere and `--skip-renderers` reuses
+the existing `apps/*/out`, which is what you want when only the packaging step
+changed. Nothing here signs the installer: local builds are unsigned, and the
+release pipeline supplies the code-signing identity.
